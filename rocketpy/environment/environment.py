@@ -224,7 +224,7 @@ class Environment:
     Environment.time_array : array
         Defined if ``netCDF`` or ``OPeNDAP`` file is used, for Forecasts,
         Reanalysis and Ensembles. Array of dates available in the file.
-    Environment.height : array
+    Environment.geopotential_height : array
         Defined if ``netCDF`` or ``OPeNDAP`` file is used, for Forecasts,
         Reanalysis and Ensembles. List of geometric height corresponding to
         launch site location.
@@ -263,15 +263,16 @@ class Environment:
         latitude=0.0,
         longitude=0.0,
         elevation=0.0,
+        height=0.0,
         datum="SIRGAS2000",
         timezone="UTC",
         max_expected_height=80000.0,
     ):
         """Initializes the Environment class, capturing essential parameters of
         the launch site, including the launch date, geographical coordinates,
-        and elevation. This class is designed to calculate crucial variables
-        for the Flight simulation, such as atmospheric air pressure, density,
-        and gravitational acceleration.
+        launch site elevation, and ellipsoidal height of CoM. This class is
+        designed to calculate crucial variables for the Flight simulation, such
+        as atmospheric air pressure, density, and gravitational acceleration.
 
         Note that the default atmospheric model is the International Standard
         Atmosphere as defined by ISO 2533 unless specified otherwise in
@@ -318,6 +319,9 @@ class Environment:
             ``Open-Elevation`` which uses the Open-Elevation API to
             find elevation data. For this option, latitude and
             longitude must also be specified. Default value is 0.
+        height : float, optional
+            Ellipsoidal height of rocket center of mass in meters.
+            Default value is height above sea level provided for elevation.
         datum : string, optional
             The desired reference ellipsoidal model, the following options are
             available: "SAD69", "WGS84", "NAD83", and "SIRGAS2000". The default
@@ -415,10 +419,16 @@ class Environment:
         self.atmospheric_model_file = str()
         self.atmospheric_model_dict = {}
 
-    def __initialize_elevation_and_max_height(self, elevation, max_expected_height):
-        """Saves the elevation and the maximum expected height."""
+    def __initialize_elevation_height_and_max_height(
+        self, elevation, height, max_expected_height
+    ):
+        """Saves the elevation, height, and the maximum expected height."""
         self.elevation = elevation
         self.set_elevation(elevation)
+        if height is None:
+            self.height = self.elevation
+        else:
+            self.height = height
         self._max_expected_height = max_expected_height
 
     def __initialize_date(self, date, timezone):
@@ -737,6 +747,9 @@ class Environment:
         gravity parameter. The gravity model is responsible for computing the
         gravity acceleration at a given height above sea level in meters.
 
+        *When Somigliana formula is used, gravity is calculated with\
+        ellipsoidal height (WGS84)
+
         Parameters
         ----------
         gravity : int, float, callable, string, list, optional
@@ -794,9 +807,7 @@ class Environment:
         9.803572
         """
         if gravity is None:
-            return self.somigliana_gravity.set_discrete(
-                0, self.max_expected_height, 100
-            )
+            return self.somigliana_gravity
         else:
             return Function(gravity, "height (m)", "gravity (m/s²)").set_discrete(
                 0, self.max_expected_height, 100
@@ -812,6 +823,10 @@ class Environment:
             raise ValueError(
                 "Max expected height cannot be lower than the surface elevation"
             )
+        if value < self.height:  # pragma: no cover
+            raise ValueError(
+                "Max expected height cannot be lower than the initial ellipsoidal height"
+            )
         self._max_expected_height = value
         self.plots.grid = np.linspace(self.elevation, self.max_expected_height)
 
@@ -824,7 +839,7 @@ class Environment:
 
         Parameters
         ----------
-        height : float
+        height : list of float
             Height above the reference ellipsoid in meters.
 
         Returns
@@ -1792,7 +1807,7 @@ class Environment:
         x2, y2 = lat_list[lat_index], lon_list[lon_index]
 
         # Determine properties in lat, lon
-        height = bilinear_interpolation(
+        geopotential_height = bilinear_interpolation(
             x,
             y,
             x1,
@@ -1847,12 +1862,14 @@ class Environment:
         wind_direction = convert_wind_heading_to_direction(wind_heading)
 
         # Convert geopotential height to geometric height
-        height = geopotential_height_to_geometric_height(height, self.earth_radius)
+        geometric_height = geopotential_height_to_geometric_height(
+            geopotential_height, self.earth_radius
+        )
 
         # Combine all data into big array
         data_array = mask_and_clean_dataset(
             levels,
-            height,
+            geometric_height,
             temper,
             wind_u,
             wind_v,
@@ -1871,7 +1888,7 @@ class Environment:
         self.__set_wind_speed_function(data_array[:, (1, 7)])
 
         # Save maximum expected height
-        self._max_expected_height = max(height[0], height[-1])
+        self._max_expected_height = max(geometric_height[0], geometric_height[-1])
 
         # Get elevation data from file
         if dictionary["surface_geopotential_height"] is not None:
@@ -1904,7 +1921,7 @@ class Environment:
         self.levels = levels
         self.temperatures = temperatures
         self.time_array = time_array[:].tolist()
-        self.height = height
+        self.geometric_height = geometric_height
 
         # Close weather data
         data.close()
@@ -2056,7 +2073,7 @@ class Environment:
         x2, y2 = lat_list[lat_index], lon_list[lon_index]
 
         # Determine properties in lat, lon
-        height = bilinear_interpolation(
+        geopotential_height = bilinear_interpolation(
             x,
             y,
             x1,
@@ -2111,11 +2128,13 @@ class Environment:
         wind_direction = convert_wind_heading_to_direction(wind_heading)
 
         # Convert geopotential height to geometric height
-        height = geopotential_height_to_geometric_height(height, self.earth_radius)
+        geometric_height = geopotential_height_to_geometric_height(
+            geopotential_height, self.earth_radius
+        )
 
         # Save ensemble data
         self.level_ensemble = levels
-        self.height_ensemble = height
+        self.height_ensemble = geometric_height
         self.temperature_ensemble = temper
         self.wind_u_ensemble = wind_u
         self.wind_v_ensemble = wind_v
@@ -2153,7 +2172,7 @@ class Environment:
         self.levels = levels
         self.temperatures = temperatures
         self.time_array = time_array[:].tolist()
-        self.height = height
+        self.geometric_height = geometric_height
 
         # Close weather data
         data.close()
@@ -2188,7 +2207,7 @@ class Environment:
 
         # Read ensemble member
         levels = self.level_ensemble[:]
-        height = self.height_ensemble[member, :]
+        geometric_height = self.height_ensemble[member, :]
         temperature = self.temperature_ensemble[member, :]
         wind_u = self.wind_u_ensemble[member, :]
         wind_v = self.wind_v_ensemble[member, :]
@@ -2199,7 +2218,7 @@ class Environment:
         # Combine all data into big array
         data_array = mask_and_clean_dataset(
             levels,
-            height,
+            geometric_height,
             temperature,
             wind_u,
             wind_v,
@@ -2219,7 +2238,7 @@ class Environment:
         self.__set_wind_speed_function(data_array[:, (1, 7)])
 
         # Save other attributes
-        self._max_expected_height = max(height[0], height[-1])
+        self._max_expected_height = max(geometric_height[0], geometric_height[-1])
         self.ensemble_member = member
 
         # Update air density, speed of sound and dynamic viscosity
@@ -2463,7 +2482,7 @@ class Environment:
         wind_y = self.wind_velocity_y.source
 
         export_env_dictionary = {
-            "gravity": self.gravity(self.elevation),
+            "gravity": self.gravity(self.height),
             "date": [
                 self.datetime_date.year,
                 self.datetime_date.month,
@@ -2473,6 +2492,7 @@ class Environment:
             "latitude": self.latitude,
             "longitude": self.longitude,
             "elevation": self.elevation,
+            "height": self.height,
             "datum": self.datum,
             "timezone": self.timezone,
             "max_expected_height": float(self.max_expected_height),
@@ -2709,6 +2729,7 @@ class Environment:
             "latitude": self.latitude,
             "longitude": self.longitude,
             "elevation": self.elevation,
+            "height": self.height,
             "datum": self.datum,
             "timezone": self.timezone,
             "max_expected_height": self.max_expected_height,
@@ -2738,6 +2759,7 @@ class Environment:
             latitude=data["latitude"],
             longitude=data["longitude"],
             elevation=data["elevation"],
+            height=data["height"],
             datum=data["datum"],
             timezone=data["timezone"],
             max_expected_height=data["max_expected_height"],
@@ -2763,6 +2785,7 @@ class Environment:
             env.__set_wind_direction_function(data["wind_direction"])
             env.__set_wind_speed_function(data["wind_speed"])
             env.elevation = data["elevation"]
+            env.height = data["height"]
             env.max_expected_height = data["max_expected_height"]
 
             if atmospheric_model in ("windy", "forecast", "reanalysis", "ensemble"):
