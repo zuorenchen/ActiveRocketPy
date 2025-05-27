@@ -343,7 +343,7 @@ class Environment:
         # Initialize constants and atmospheric variables
         self.__initialize_empty_variables()
         self.__initialize_constants()
-        self.__initialize_elevation_and_max_height(elevation, max_expected_height)
+        self.__initialize_elevation_height_and_max_height(elevation, height, max_expected_height)
 
         # Initialize plots and prints objects
         self.prints = _EnvironmentPrints(self)
