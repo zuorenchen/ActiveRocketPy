@@ -30,7 +30,9 @@ class _EnvironmentPlots:
         None
         """
         # Create height grid
-        self.grid = np.linspace(environment.elevation, environment.max_expected_height)
+        self.grid = np.linspace(
+            environment.orthometric_height, environment.max_expected_height
+        )
         self.environment = environment
 
     def __wind(self, ax):

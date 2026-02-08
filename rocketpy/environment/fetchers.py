@@ -48,6 +48,47 @@ def fetch_open_elevation(lat, lon):
         raise RuntimeError("Unable to reach Open-Elevation API servers.") from e
 
 
+@exponential_backoff(max_attempts=3, base_delay=1, max_delay=60)
+def fetch_geoid_height(lat, lon, geodetic_datum="WGS84_G1674", geoid_model="EGM1996"):
+    """Fetches geoid height data from the VDatum API at a given latitude, longitude,
+    geodetic datum, and geoid model.
+
+    Parameters
+    ----------
+    lat : float
+        The latitude of the location.
+    lon : float
+        The longitude of the location.
+    geodetic_datum : string
+        The geodetic datum. Default is "WGS84_G1674"
+        Check https://vdatum.noaa.gov/docs/services for options.
+    geoid_model : string
+        The geodetic datum. Default is "EGM1996"
+        Check https://vdatum.noaa.gov/docs/services for options.
+
+    Returns
+    -------
+    float
+        The geoid height at the given latitude and longitude
+        of given geodetic datum and geoid model in meters
+
+    Raises
+    ------
+    RuntimeError
+        If there is a problem reaching the Open-Elevation API servers.
+    """
+    request_url = f"https://vdatum.noaa.gov/vdatumweb/api/convert?s_x={lon}&s_y={lat}&s_z=0&s_h_frame={geodetic_datum}&s_v_frame={geoid_model}&s_v_geoid={geoid_model}&t_h_frame={geodetic_datum}&t_v_frame={geodetic_datum}&t_v_geoid={geoid_model}"
+    print(f"Fetching geoid height from VDatum: {request_url}")
+    try:
+        response = requests.get(request_url)
+        return response.json()["t_z"]
+    except (
+        requests.exceptions.RequestException,
+        requests.exceptions.JSONDecodeError,
+    ) as e:
+        raise RuntimeError("Unable to reach VDatum API servers.") from e
+
+
 @exponential_backoff(max_attempts=5, base_delay=2, max_delay=60)
 def fetch_atmospheric_data_from_windy(lat, lon, model):
     """Fetches atmospheric data from Windy.com API for a given latitude and

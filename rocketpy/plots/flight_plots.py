@@ -112,13 +112,13 @@ class _FlightPlots:
         ax1.scatter(
             self.flight.x(0),
             self.flight.y(0),
-            self.flight.z(0) - self.flight.env.elevation,
+            self.flight.z(0) - self.flight.env.ellipsoidal_height,
             color="black",
         )
         ax1.scatter(
             self.flight.x(self.flight.t_final),
             self.flight.y(self.flight.t_final),
-            self.flight.z(self.flight.t_final) - self.flight.env.elevation,
+            self.flight.z(self.flight.t_final) - self.flight.env.ellipsoidal_height,
             color="red",
             marker="X",
         )

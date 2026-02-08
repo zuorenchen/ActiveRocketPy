@@ -13,6 +13,7 @@ import pytz
 from rocketpy.environment.fetchers import (
     fetch_atmospheric_data_from_windy,
     fetch_gefs_ensemble,
+    fetch_geoid_height,
     fetch_gfs_file_return_dataset,
     fetch_hiresw_file_return_dataset,
     fetch_nam_file_return_dataset,
@@ -64,9 +65,12 @@ class Environment:
         Launch site latitude.
     Environment.longitude : float
         Launch site longitude.
-    Environment.datum : string
-        The desired reference ellipsoid model, the following options are
-        available: ``SAD69``, ``WGS84``, ``NAD83``, and ``SIRGAS2000``.
+    Environment.geodetic_datum : string
+        The desired reference ellipsoid model. Check https://vdatum.noaa.gov/docs/services.html
+        for options.
+    Environment.geoid_model : string
+        The desired gravity geoid model. Check https://vdatum.noaa.gov/docs/services.html
+        for options
     Environment.initial_east : float
         Launch site East UTM coordinate
     Environment.initial_north :  float
@@ -80,8 +84,12 @@ class Environment:
         Launch site South/North hemisphere
     Environment.initial_ew : string
         Launch site East/West hemisphere
-    Environment.elevation : float
-        Launch site elevation.
+    Environment.orthometric_height : float
+        Launch site orthometric height.
+    Environment.ellipsoidal_height : float
+        Launch site ellipsoidal height.
+    Environment.geoid_height : float
+        Launch site geoid height.
     Environment.datetime_date : datetime
         Date time of launch in UTC time zone using the ``datetime`` object.
     Environment.local_date : datetime
@@ -97,7 +105,7 @@ class Environment:
     Environment.elev_lat_array : array
         Unidimensional array containing the latitude coordinates.
     Environment.elev_array : array
-        Two-dimensional Array containing the elevation information.
+        Two-dimensional Array containing the orthometric_height information.
     Environment.topographic_profile_activated : bool
         True if the user already set a topographic profile. False otherwise.
     Environment.max_expected_height : float
@@ -262,17 +270,17 @@ class Environment:
         date=None,
         latitude=0.0,
         longitude=0.0,
-        elevation=0.0,
-        height=0.0,
-        datum="SIRGAS2000",
+        ellipsoidal_height=None,
+        geodetic_datum="WGS84_G1674",
+        geoid_model="EGM1996",
         timezone="UTC",
         max_expected_height=80000.0,
     ):
         """Initializes the Environment class, capturing essential parameters of
         the launch site, including the launch date, geographical coordinates,
-        launch site elevation, and ellipsoidal height of CoM. This class is
-        designed to calculate crucial variables for the Flight simulation, such
-        as atmospheric air pressure, density, and gravitational acceleration.
+        launch site and heights of CoM. This class is designed to calculate
+        crucial variables for the Flight simulation, such as atmospheric
+        pressure, density, and gravitational acceleration.
 
         Note that the default atmospheric model is the International Standard
         Atmosphere as defined by ISO 2533 unless specified otherwise in
@@ -303,29 +311,28 @@ class Environment:
             Latitude in degrees (ranging from -90 to 90) of rocket
             launch location. Must be given if a Forecast, Reanalysis
             or Ensemble will be used as an atmospheric model or if
-            Open-Elevation will be used to compute elevation. Positive
-            values correspond to the North. Default value is 0, which
-            corresponds to the equator.
+            Open-Elevation will be used to compute orthometric_height.
+            Positive values correspond to the North. Default value is 0,
+            which corresponds to the equator.
         longitude : float, optional
             Longitude in degrees (ranging from -180 to 180) of rocket
             launch location. Must be given if a Forecast, Reanalysis
             or Ensemble will be used as an atmospheric model or if
-            Open-Elevation will be used to compute elevation. Positive
-            values correspond to the East. Default value is 0, which
-            corresponds to the Greenwich Meridian.
-        elevation : float, optional
-            Elevation of launch site measured as height above sea
-            level in meters. Alternatively, can be set as
-            ``Open-Elevation`` which uses the Open-Elevation API to
-            find elevation data. For this option, latitude and
-            longitude must also be specified. Default value is 0.
-        height : float, optional
+            Open-Elevation will be used to compute orthometric_height.
+            Positive values correspond to the East. Default value is 0,
+            which corresponds to the Greenwich Meridian.
+        ellipsoidal_height : float, optional
             Ellipsoidal height of rocket center of mass in meters.
-            Default value is height above sea level provided for elevation.
-        datum : string, optional
-            The desired reference ellipsoidal model, the following options are
-            available: "SAD69", "WGS84", "NAD83", and "SIRGAS2000". The default
-            is "SIRGAS2000".
+            Alternatively, can be set as ``Open-Elevation`` which uses the
+            Open-Elevation API to find orthometric_height data in EGM1996 then
+            convert to ellipsoidal_height. For this option, latitude and
+            longitude must also be specified. Open-Elevation is used by default.
+        geodetic_datum : string, optional
+            The desired reference ellipsoidal model. Check https://vdatum.noaa.gov/docs/services.html
+            for options. The default is "WGS84_G1674".
+        geoid_model : string, optional
+            The desired gravity geoid model. Check https://vdatum.noaa.gov/docs/services.html
+            for geoid model options. The default is "EGM1996".
         timezone : string, optional
             Name of the time zone. To see all time zones, import pytz and run
             ``print(pytz.all_timezones)``. Default time zone is "UTC".
@@ -343,11 +350,6 @@ class Environment:
         # Initialize constants and atmospheric variables
         self.__initialize_empty_variables()
         self.__initialize_constants()
-        self.__initialize_elevation_height_and_max_height(elevation, height, max_expected_height)
-
-        # Initialize plots and prints objects
-        self.prints = _EnvironmentPrints(self)
-        self.plots = _EnvironmentPlots(self)
 
         # Set the atmosphere model to the standard atmosphere
         self.set_atmospheric_model("standard_atmosphere")
@@ -355,11 +357,16 @@ class Environment:
         # Initialize date, latitude, longitude, and Earth geometry
         self.__initialize_date(date, timezone)
         self.set_location(latitude, longitude)
-        self.__initialize_earth_geometry(datum)
+        self.__initialize_earth_geometry(geodetic_datum, geoid_model)
+        self.__initialize_height(ellipsoidal_height, max_expected_height)
         self.__initialize_utm_coordinates()
 
         # Set the gravity model
         self.gravity = self.set_gravity_model(gravity)
+
+        # Initialize plots and prints objects
+        self.prints = _EnvironmentPrints(self)
+        self.plots = _EnvironmentPlots(self)
 
     def __initialize_constants(self):
         """Sets some important constants and atmospheric variables."""
@@ -419,17 +426,29 @@ class Environment:
         self.atmospheric_model_file = str()
         self.atmospheric_model_dict = {}
 
-    def __initialize_elevation_height_and_max_height(
-        self, elevation, height, max_expected_height
-    ):
-        """Saves the elevation, height, and the maximum expected height."""
-        self.elevation = elevation
-        self.set_elevation(elevation)
-        if height is None:
-            self.height = self.elevation
-        else:
-            self.height = height
+    def __initialize_height(self, ellipsoidal_height, max_expected_height):
+        """Saves the orthometric_height (H), ellipsoidal_height (h), geoid_height (N), and the maximum expected height.
+        H = h-N
+        """
         self._max_expected_height = max_expected_height
+        self.geoid_height = fetch_geoid_height(
+            lat, lon, geodetic_datum="WGS84_G1674", geoid_model="EGM1996"
+        )
+
+        if ellipsoidal_height not in ["Open-Elevation", "SRTM"]:
+            # NOTE: this is assuming the orthometric_height is a number (i.e. float, int, etc.)
+            self.ellipsoidal_height = ellipsoidal_height
+            self.orthometric_height = self.ellipsoidal_height - self.geoid_height
+        else:
+            self.orthometric_height = fetch_open_elevation(
+                self.latitude, self.longitude
+            )
+            self.ellipsoidal_height = self.geoid_height + self.orthometric_height
+            print(
+                f"Orthometric height received from Open-elevation: {self.orthometric_height} m"
+            )
+            print("Overwrite geoid model to EGM1996 because Open-elevation is used")
+            self.geoid_model = "EGM1996"
 
     def __initialize_date(self, date, timezone):
         """Saves the date and configure timezone."""
@@ -441,10 +460,11 @@ class Environment:
             self.local_date = None
             self.timezone = None
 
-    def __initialize_earth_geometry(self, datum):
-        """Initialize Earth geometry, save datum and Recalculate Earth Radius"""
-        self.datum = datum
-        self.ellipsoid = self.set_earth_geometry(datum)
+    def __initialize_earth_geometry(self, geodetic_datum, geoid_model):
+        """Initialize Earth geometry, save geodetic_datum and Recalculate Earth Radius"""
+        self.geodetic_datum = geodetic_datum
+        self.geoid_model = geoid_model
+        self.ellipsoid = self.set_earth_geometry(geodetic_datum)
         self.earth_radius = self.calculate_earth_radius(
             lat=self.latitude,
             semi_major_axis=self.ellipsoid.semi_major_axis,
@@ -758,14 +778,14 @@ class Environment:
             The input type can be one of the following:
 
             - ``int`` or ``float``: The gravity acceleration is set as a\
-              constant function with respect to height;
+              constant function with respect to ellipsoidal height;
 
-            - ``callable``: This callable should receive the height above\
-              sea level in meters and return the gravity acceleration;
+            - ``callable``: This callable should receive the ellipsoidal height\
+              in meters and return the gravity acceleration;
 
             - ``list``: The datapoints should be structured as\
-              ``[(h_i,g_i), ...]`` where ``h_i`` is the height above sea\
-              level in meters and ``g_i`` is the gravity acceleration in m/s²;
+              ``[(h_i,g_i), ...]`` where ``h_i`` is the ellipsoidal height in\
+              meters and ``g_i`` is the gravity acceleration in m/s²;
 
             - ``string``: The string should correspond to a path to a CSV file\
               containing the gravity acceleration data;
@@ -797,7 +817,7 @@ class Environment:
         [np.float64(9.80665), np.float64(9.80665), np.float64(9.80665)]
 
         It's also possible to variate the gravity acceleration by defining
-        its function of height:
+        its function of ellipsoidal height:
 
         >>> R_t = 6371000
         >>> g_func = lambda h : g_0 * (R_t / (R_t + h))**2
@@ -809,9 +829,9 @@ class Environment:
         if gravity is None:
             return self.somigliana_gravity
         else:
-            return Function(gravity, "height (m)", "gravity (m/s²)").set_discrete(
-                0, self.max_expected_height, 100
-            )
+            return Function(
+                gravity, "ellipsoidal height (m)", "gravity (m/s²)"
+            ).set_discrete(0, self.max_expected_height, 100)
 
     @property
     def max_expected_height(self):
@@ -819,19 +839,19 @@ class Environment:
 
     @max_expected_height.setter
     def max_expected_height(self, value):
-        if value < self.elevation:  # pragma: no cover
+        if value < self.orthometric_height:  # pragma: no cover
             raise ValueError(
-                "Max expected height cannot be lower than the surface elevation"
+                "Max expected height cannot be lower than the surface orthometric height"
             )
-        if value < self.height:  # pragma: no cover
+        if value < self.ellipsoidal_height:  # pragma: no cover
             raise ValueError(
                 "Max expected height cannot be lower than the initial ellipsoidal height"
             )
         self._max_expected_height = value
-        self.plots.grid = np.linspace(self.elevation, self.max_expected_height)
+        self.plots.grid = np.linspace(self.orthometric_height, self.max_expected_height)
 
-    @funcify_method("height (m)", "gravity (m/s²)")
-    def somigliana_gravity(self, height):
+    @funcify_method("ellipsoidal height (m)", "gravity (m/s²)")
+    def somigliana_gravity(self, ellipsoidal_height):
         """Computes the gravity acceleration with the Somigliana formula [1]_.
         An height correction is applied to the normal gravity that is
         accurate for heights used in aviation. The formula is based on the
@@ -839,7 +859,7 @@ class Environment:
 
         Parameters
         ----------
-        height : list of float
+        ellipsoidal_height : list of float
             Height above the reference ellipsoid in meters.
 
         Returns
@@ -866,38 +886,11 @@ class Environment:
         )
         height_correction = (
             1
-            - height * 2 / a * (1 + f + m_rot - 2 * f * sin_lat_sqrd)
-            + 3 * height**2 / a**2
+            - ellipsoidal_height * 2 / a * (1 + f + m_rot - 2 * f * sin_lat_sqrd)
+            + 3 * ellipsoidal_height**2 / a**2
         )
 
         return height_correction * gravity_somgl
-
-    def set_elevation(self, elevation="Open-Elevation"):
-        """Set elevation of launch site given user input or using the
-        Open-Elevation API.
-
-        Parameters
-        ----------
-        elevation : float, string, optional
-            Elevation of launch site measured as height above sea level in
-            meters. Alternatively, can be set as ``Open-Elevation`` which uses
-            the Open-Elevation API to find elevation data. For this option,
-            latitude and longitude must have already been specified.
-
-            See Also
-            --------
-            :meth:`rocketpy.Environment.set_location`
-
-        Returns
-        -------
-        None
-        """
-        if elevation not in ["Open-Elevation", "SRTM"]:
-            # NOTE: this is assuming the elevation is a number (i.e. float, int, etc.)
-            self.elevation = elevation
-        else:
-            self.elevation = fetch_open_elevation(self.latitude, self.longitude)
-            print(f"Elevation received: {self.elevation} m")
 
     def set_topographic_profile(  # pylint: disable=redefined-builtin, unused-argument
         self, type, file, dictionary="netCDF4", crs=None
@@ -948,7 +941,7 @@ class Environment:
 
     def get_elevation_from_topographic_profile(self, lat, lon):
         """Function which receives as inputs the coordinates of a point and
-        finds its elevation in the provided Topographic Profile.
+        finds its orthometric height in the provided Topographic Profile.
 
         Parameters
         ----------
@@ -959,8 +952,8 @@ class Environment:
 
         Returns
         -------
-        elevation : float | int
-            Elevation provided by the topographic data, in meters.
+        orthometric_height : float | int
+            Orthometric height provided by the topographic data, in meters.
         """
         # TODO: refactor this method.  pylint: disable=too-many-statements
         if self.topographic_profile_activated is False:  # pragma: no cover
@@ -1026,10 +1019,10 @@ class Environment:
                 f"{self.elev_lon_array[0]} to {self.elev_lon_array[-1]}."
             )
 
-        # Get the elevation
-        elevation = self.elev_array[lat_index][lon_index]
+        # Get the orthometric_height
+        orthometric_height = self.elev_array[lat_index][lon_index]
 
-        return elevation
+        return orthometric_height
 
     def set_atmospheric_model(  # pylint: disable=too-many-statements
         self,
@@ -1059,8 +1052,8 @@ class Environment:
               is chosen.
 
             - ``wyoming_sounding``: sets pressure, temperature, wind-u
-              and wind-v profiles and surface elevation obtained from
-              an upper air sounding given by the file parameter through
+              and wind-v profiles and surface orthometric height obtained 
+              from an upper air sounding given by the file parameter through
               an URL. This URL should point to a data webpage given by
               selecting plot type as text: list, a station and a time at
               `weather.uwyo`_.
@@ -1071,22 +1064,22 @@ class Environment:
               .. _weather.uwyo: http://weather.uwyo.edu/upperair/sounding.html
 
             - ``windy_atmosphere``: sets pressure, temperature, wind-u and
-              wind-v profiles and surface elevation obtained from the Windy API.
+              wind-v profiles and surface orthometric height obtained from the Windy API.
               See file argument to specify the model as either ``ECMWF``,
               ``GFS`` or ``ICON``.
 
             - ``Forecast``: sets pressure, temperature, wind-u and wind-v
-              profiles and surface elevation obtained from a weather forecast
-              file in ``netCDF`` format or from an ``OPeNDAP`` URL, both given
-              through the file parameter. When this type is chosen, the date
-              and location of the launch should already have been set through
-              the date and location parameters when initializing the
+              profiles and surface orthometric height obtained from a weather
+              forecast file in ``netCDF`` format or from an ``OPeNDAP`` URL, 
+              both given through the file parameter. When this type is chosen, 
+              the date and location of the launch should already have been set 
+              through the date and location parameters when initializing the
               Environment. The ``netCDF`` and ``OPeNDAP`` datasets must contain
               at least geopotential height or geopotential, temperature, wind-u
               and wind-v profiles as a function of pressure levels. If surface
-              geopotential or geopotential height is given, elevation is also
-              set. Otherwise, elevation is not changed. Profiles are
-              interpolated bi-linearly using supplied latitude and longitude.
+              geopotential or geopotential height is given, orthometric height
+              is also set. Otherwise, orthometric height is not changed. Profiles
+              are interpolated bi-linearly using supplied latitude and longitude.
               The date used is the nearest one to the date supplied.
               Furthermore, a dictionary must be supplied through the dictionary
               parameter in order for the dataset to be accurately read. Lastly,
@@ -1094,17 +1087,17 @@ class Environment:
               or descending order of latitude and longitude.
 
             - ``Reanalysis``: sets pressure, temperature, wind-u and wind-v
-              profiles and surface elevation obtained from a weather forecast
-              file in ``netCDF`` format or from an ``OPeNDAP`` URL, both given
-              through the file parameter. When this type is chosen, the date and
-              location of the launch should already have been set through the
-              date and location parameters when initializing the Environment.
+              profiles and surface orthometric height obtained from a weather
+              forecast file in ``netCDF`` format or from an ``OPeNDAP`` URL,
+              both given through the file parameter. When this type is chosen,
+              the date and location of the launch should already have been set
+              through the date and location parameters when initializing the Environment.
               The ``netCDF`` and ``OPeNDAP`` datasets must contain at least
               geopotential height or geopotential, temperature, wind-u and
               wind-v profiles as a function of pressure levels. If surface
-              geopotential or geopotential height is given, elevation is also
-              set. Otherwise, elevation is not changed. Profiles are
-              interpolated bi-linearly using supplied latitude and longitude.
+              geopotential or geopotential height is given, orthometric height
+              is also set. Otherwise, orthometric height is not changed. Profiles
+              are interpolated bi-linearly using supplied latitude and longitude.
               The date used is the nearest one to the date supplied.
               Furthermore, a dictionary must be supplied through the dictionary
               parameter in order for the dataset to be accurately read. Lastly,
@@ -1112,17 +1105,17 @@ class Environment:
               or descending order of latitude and longitude.
 
             - ``Ensemble``: sets pressure, temperature, wind-u and wind-v
-              profiles and surface elevation obtained from a weather forecast
-              file in ``netCDF`` format or from an ``OPeNDAP`` URL, both given
-              through the file parameter. When this type is chosen, the date and
-              location of the launch should already have been set through the
-              date and location parameters when initializing the Environment.
+              profiles and surface orthometric height obtained from a weather
+              forecast file in ``netCDF`` format or from an ``OPeNDAP`` URL,
+              both given through the file parameter. When this type is chosen,
+              the date and location of the launch should already have been set
+              through the date and location parameters when initializing the Environment.
               The ``netCDF`` and ``OPeNDAP`` datasets must contain at least
               geopotential height or geopotential, temperature, wind-u and
               wind-v profiles as a function of pressure levels. If surface
-              geopotential or geopotential height is given, elevation is also
-              set. Otherwise, elevation is not changed. Profiles are
-              interpolated bi-linearly using supplied latitude and longitude.
+              geopotential or geopotential height is given, orthometric height
+              is also set. Otherwise, orthometric height is not changed. Profiles
+              are interpolated bi-linearly using supplied latitude and longitude.
               The date used is the nearest one to the date supplied.
               Furthermore, a dictionary must be supplied through the dictionary
               parameter in order for the dataset to be accurately read. Lastly,
@@ -1530,8 +1523,8 @@ class Environment:
         # Save maximum expected height
         self._max_expected_height = max(altitude_array[0], altitude_array[-1])
 
-        # Get elevation data from file
-        self.elevation = float(response["header"]["elevation"])
+        # Get orthometric_height data from file
+        self.orthometric_height = float(response["header"]["orthometric_height"])
 
         # Compute info data
         self.atmospheric_model_init_date = get_initial_date_from_time_array(
@@ -1555,7 +1548,7 @@ class Environment:
         self.levels = pressure_levels
         self.temperatures = temperature_array
         self.time_array = time_array
-        self.height = altitude_array
+        self.ellipsoidal_height = altitude_array
 
     def __parse_windy_file(self, response, time_index, pressure_levels):
         geopotential_height_array = np.array(
@@ -1590,7 +1583,7 @@ class Environment:
     def process_wyoming_sounding(self, file):  # pylint: disable=too-many-statements
         """Import and process the upper air sounding data from `Wyoming
         Upper Air Soundings` database given by the url in file. Sets
-        pressure, temperature, wind-u, wind-v profiles and surface elevation.
+        pressure, temperature, wind-u, wind-v profiles and surface orthometric height.
 
         Parameters
         ----------
@@ -1657,11 +1650,11 @@ class Environment:
         self.__set_wind_direction_function(data_array[:, (1, 6)])
         self.__set_wind_speed_function(data_array[:, (1, 7)])
 
-        # Retrieve station elevation from station info
+        # Retrieve station orthometric_height from station info
         station_elevation_text = station_info.split("\n")[6]
 
-        # Convert station elevation text into float value
-        self.elevation = float(
+        # Convert station orthometric_height text into float value
+        self.orthometric_height = float(
             re.findall(r"[0-9]+\.[0-9]+|[0-9]+", station_elevation_text)[0]
         )
 
@@ -1671,17 +1664,18 @@ class Environment:
     def process_forecast_reanalysis(self, file, dictionary):  # pylint: disable=too-many-locals,too-many-statements
         """Import and process atmospheric data from weather forecasts
         and reanalysis given as ``netCDF`` or ``OPeNDAP`` files.
-        Sets pressure, temperature, wind-u and wind-v
-        profiles and surface elevation obtained from a weather
-        file in ``netCDF`` format or from an ``OPeNDAP`` URL, both
-        given through the file parameter. The date and location of the launch
-        should already have been set through the date and
+        Sets pressure, temperature, wind-u and wind-v profiles and
+        surface orthometric height obtained from a weather file in
+        ``netCDF`` format or from an ``OPeNDAP`` URL, both given
+        through the file parameter. The date and location of the
+        launch should already have been set through the date and
         location parameters when initializing the Environment.
         The ``netCDF`` and ``OPeNDAP`` datasets must contain at least
         geopotential height or geopotential, temperature,
         wind-u and wind-v profiles as a function of pressure levels.
         If surface geopotential or geopotential height is given,
-        elevation is also set. Otherwise, elevation is not changed.
+        orthometric height is also set. Otherwise, orthometric height
+        is not changed.
         Profiles are interpolated bi-linearly using supplied
         latitude and longitude. The date used is the nearest one
         to the date supplied. Furthermore, a dictionary must be
@@ -1890,9 +1884,9 @@ class Environment:
         # Save maximum expected height
         self._max_expected_height = max(geometric_height[0], geometric_height[-1])
 
-        # Get elevation data from file
+        # Get orthometric_height data from file
         if dictionary["surface_geopotential_height"] is not None:
-            self.elevation = get_elevation_data_from_dataset(
+            self.orthometric_height = get_elevation_data_from_dataset(
                 dictionary, data, time_index, lat_index, lon_index, x, y, x1, x2, y1, y2
             )
 
@@ -1929,17 +1923,17 @@ class Environment:
     def process_ensemble(self, file, dictionary):  # pylint: disable=too-many-locals,too-many-statements
         """Import and process atmospheric data from weather ensembles
         given as ``netCDF`` or ``OPeNDAP`` files. Sets pressure, temperature,
-        wind-u and wind-v profiles and surface elevation obtained from a weather
-        ensemble file in ``netCDF`` format or from an ``OPeNDAP`` URL, both
-        given through the file parameter. The date and location of the launch
+        wind-u and wind-v profiles and surface orthometric height obtained from
+        a weather ensemble file in ``netCDF`` format or from an ``OPeNDAP`` URL,
+        both given through the file parameter. The date and location of the launch
         should already have been set through the date and location parameters
         when initializing the Environment. The ``netCDF`` and ``OPeNDAP``
         datasets must contain at least geopotential height or geopotential,
         temperature, wind-u and wind-v profiles as a function of pressure
         levels. If surface geopotential or geopotential height is given,
-        elevation is also set. Otherwise, elevation is not changed. Profiles are
-        interpolated bi-linearly using supplied latitude and longitude. The date
-        used is the nearest one to the date supplied. Furthermore, a dictionary
+        orthometric height is also set. Otherwise, orthometric height is not changed.
+        Profiles are interpolated bi-linearly using supplied latitude and longitude.
+        The date used is the nearest one to the date supplied. Furthermore, a dictionary
         must be supplied through the dictionary parameter in order for the
         dataset to be accurately read. Lastly, the dataset must use a
         rectangular grid sorted in either ascending or descending order of
@@ -2146,9 +2140,9 @@ class Environment:
         # Activate default ensemble
         self.select_ensemble_member()
 
-        # Get elevation data from file
+        # Get orthometric_height data from file
         if dictionary["surface_geopotential_height"] is not None:
-            self.elevation = get_elevation_data_from_dataset(
+            self.orthometric_height = get_elevation_data_from_dataset(
                 dictionary, data, time_index, lat_index, lon_index, x, y, x1, x2, y1, y2
             )
 
@@ -2482,7 +2476,7 @@ class Environment:
         wind_y = self.wind_velocity_y.source
 
         export_env_dictionary = {
-            "gravity": self.gravity(self.height),
+            "gravity": self.gravity(self.ellipsoidal_height),
             "date": [
                 self.datetime_date.year,
                 self.datetime_date.month,
@@ -2491,9 +2485,9 @@ class Environment:
             ],
             "latitude": self.latitude,
             "longitude": self.longitude,
-            "elevation": self.elevation,
-            "height": self.height,
-            "datum": self.datum,
+            "orthometric_height": self.orthometric_height,
+            "ellipsoidal_height": self.ellipsoidal_height,
+            "geodetic_datum": self.geodetic_datum,
             "timezone": self.timezone,
             "max_expected_height": float(self.max_expected_height),
             "atmospheric_model_type": self.atmospheric_model_type,
@@ -2512,14 +2506,14 @@ class Environment:
             "it in the future by using the custom_atmosphere atmospheric model."
         )
 
-    def set_earth_geometry(self, datum):
+    def set_earth_geometry(self, geodetic_datum):
         """Sets the Earth geometry for the ``Environment`` class based on the
-        provided datum.
+        provided geodetic_datum.
 
         Parameters
         ----------
-        datum : str
-            The datum to be used for the Earth geometry. The following options
+        geodetic_datum : str
+            The geodetic_datum to be used for the Earth geometry. The following options
             are supported: 'SIRGAS2000', 'SAD69', 'NAD83', 'WGS84'.
 
         Returns
@@ -2535,12 +2529,12 @@ class Environment:
             "WGS84": geodesy(6378137.0, 1 / 298.257223563),
         }
         try:
-            return ellipsoid[datum]
+            return ellipsoid[geodetic_datum]
         except KeyError as e:  # pragma: no cover
-            available_datums = ", ".join(ellipsoid.keys())
+            available_geodetic_datums = ", ".join(ellipsoid.keys())
             raise AttributeError(
-                f"The reference system '{datum}' is not recognized. Please use one of "
-                f"the following recognized datum: {available_datums}"
+                f"The reference system '{geodetic_datum}' is not recognized. Please use one of "
+                f"the following recognized geodetic_datum: {available_geodetic_datums}"
             ) from e
 
     # Auxiliary functions - Geodesic Coordinates
@@ -2728,9 +2722,9 @@ class Environment:
             "date": self.date,
             "latitude": self.latitude,
             "longitude": self.longitude,
-            "elevation": self.elevation,
-            "height": self.height,
-            "datum": self.datum,
+            "orthometric_height": self.orthometric_height,
+            "ellipsoidal_height": self.ellipsoidal_height,
+            "geodetic_datum": self.geodetic_datum,
             "timezone": self.timezone,
             "max_expected_height": self.max_expected_height,
             "atmospheric_model_type": self.atmospheric_model_type,
@@ -2758,9 +2752,10 @@ class Environment:
             date=data["date"],
             latitude=data["latitude"],
             longitude=data["longitude"],
-            elevation=data["elevation"],
-            height=data["height"],
-            datum=data["datum"],
+            orthometric_height=data["orthometric_height"],
+            ellipsoidal_height=data["ellipsoidal_height"],
+            geoid_height=data["geoid_height"],
+            geodetic_datum=data["geodetic_datum"],
             timezone=data["timezone"],
             max_expected_height=data["max_expected_height"],
         )
@@ -2784,8 +2779,8 @@ class Environment:
             env.__set_wind_heading_function(data["wind_heading"])
             env.__set_wind_direction_function(data["wind_direction"])
             env.__set_wind_speed_function(data["wind_speed"])
-            env.elevation = data["elevation"]
-            env.height = data["height"]
+            env.orthometric_height = data["orthometric_height"]
+            env.ellipsoidal_height = data["ellipsoidal_height"]
             env.max_expected_height = data["max_expected_height"]
 
             if atmospheric_model in ("windy", "forecast", "reanalysis", "ensemble"):
