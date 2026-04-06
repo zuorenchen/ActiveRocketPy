@@ -564,14 +564,11 @@ class Rocket:
             "Center of Mass Position (Rocket + Motor + Propellant)"
         )
 
-        _t = self.motor.propellant_mass.x_array
-        _masses = self.motor.propellant_mass.get_value(_t)
+        _inv = self.motor.propellant_mass.inverse_function()
         self.center_of_mass_by_propellant_mass = Function(
-            np.column_stack([_masses, self.center_of_mass.get_value(_t)]),
+            lambda m: self.center_of_mass(_inv(m)),
             "Propellant Mass (kg)",
             "Center of Mass Position (m)",
-            "spline",
-            "constant",
         )
         return self.center_of_mass, self.center_of_mass_by_propellant_mass
 
@@ -944,50 +941,37 @@ class Rocket:
         self.I_13 = self.dry_I_13 + self.motor.propellant_I_13
         self.I_23 = self.dry_I_23 + self.motor.propellant_I_23
 
-        # Build by-mass parameterizations directly from the time-based Functions.
-        _t = self.motor.propellant_mass.x_array
-        _masses = self.motor.propellant_mass.get_value(_t)
+        # Build by-mass parameterizations using inverse of propellant_mass.
+        _inv = self.motor.propellant_mass.inverse_function()
         self.I_11_by_propellant_mass = Function(
-            np.column_stack([_masses, self.I_11.get_value(_t)]),
+            lambda m: self.I_11(_inv(m)),
             "Propellant Mass (kg)",
             "Inertia I_11 (kg m²)",
-            "spline",
-            "constant",
         )
         self.I_22_by_propellant_mass = Function(
-            np.column_stack([_masses, self.I_22.get_value(_t)]),
+            lambda m: self.I_22(_inv(m)),
             "Propellant Mass (kg)",
             "Inertia I_22 (kg m²)",
-            "spline",
-            "constant",
         )
         self.I_33_by_propellant_mass = Function(
-            np.column_stack([_masses, self.I_33.get_value(_t)]),
+            lambda m: self.I_33(_inv(m)),
             "Propellant Mass (kg)",
             "Inertia I_33 (kg m²)",
-            "spline",
-            "constant",
         )
         self.I_12_by_propellant_mass = Function(
-            np.column_stack([_masses, self.I_12.get_value(_t)]),
+            lambda m: self.I_12(_inv(m)),
             "Propellant Mass (kg)",
             "Inertia I_12 (kg m²)",
-            "spline",
-            "constant",
         )
         self.I_13_by_propellant_mass = Function(
-            np.column_stack([_masses, self.I_13.get_value(_t)]),
+            lambda m: self.I_13(_inv(m)),
             "Propellant Mass (kg)",
             "Inertia I_13 (kg m²)",
-            "spline",
-            "constant",
         )
         self.I_23_by_propellant_mass = Function(
-            np.column_stack([_masses, self.I_23.get_value(_t)]),
+            lambda m: self.I_23(_inv(m)),
             "Propellant Mass (kg)",
             "Inertia I_23 (kg m²)",
-            "spline",
-            "constant",
         )
 
         # Return inertias
@@ -1076,15 +1060,12 @@ class Rocket:
         self.com_to_cdm_function.set_outputs("Z Coordinate COM to CDM (m)")
         self.com_to_cdm_function.set_title("Z Coordinate COM to CDM")
 
-        # Build the by-mass parameterization directly.
-        _t = self.motor.propellant_mass.x_array
-        _masses = self.motor.propellant_mass.get_value(_t)
+        # Build the by-mass parameterization using inverse of propellant_mass.
+        _inv = self.motor.propellant_mass.inverse_function()
         self.com_to_cdm_by_propellant_mass = Function(
-            np.column_stack([_masses, self.com_to_cdm_function.get_value(_t)]),
+            lambda m: self.com_to_cdm_function(_inv(m)),
             "Propellant Mass (kg)",
             "Z Coordinate COM to CDM (m)",
-            "spline",
-            "constant",
         )
 
         return self.com_to_cdm_function, self.com_to_cdm_by_propellant_mass

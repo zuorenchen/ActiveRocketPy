@@ -614,7 +614,7 @@ class Flight:
         self.max_time_step = max_time_step
         self.min_time_step = min_time_step
         self.rtol = rtol
-        self.atol = atol or 6 * [1e-3] + 4 * [1e-6] + 3 * [1e-3]
+        self.atol = atol or 6 * [1e-3] + 4 * [1e-6] + 3 * [1e-3] + [1e-4]
         self.initial_solution = initial_solution
         self.time_overshoot = time_overshoot
         self.terminate_on_apogee = terminate_on_apogee
@@ -1951,9 +1951,8 @@ class Flight:
             + self.rocket.motor.pressure_thrust(pressure),
             0,
         )
-        effective_thrust = net_thrust * getattr(
-            getattr(self.rocket, "throttle_control", None), "throttle", 1.0
-        )
+        throttle = self.__get_throttle_ratio()
+        effective_thrust = net_thrust * throttle
         rho = self.env.density.get_value_opt(z)
         R3 = -0.5 * rho * (free_stream_speed**2) * self.rocket.area * (drag_coeff)
 
@@ -2057,9 +2056,7 @@ class Flight:
                 0,
             )
             # Throttle control
-            effective_thrust = net_thrust * getattr(
-                getattr(self.rocket, "throttle_control", None), "throttle", 1.0
-            )
+            effective_thrust = net_thrust * self.__get_throttle_ratio()
 
             # TVC (Thrust Vector Control)
             if hasattr(self.rocket, "tvc"):
