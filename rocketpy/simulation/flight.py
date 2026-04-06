@@ -1671,6 +1671,7 @@ class Flight:
                 w1_init,
                 w2_init,
                 w3_init,
+                self.rocket.motor.propellant_initial_mass,
             ]
             # Set initial derivative for rail phase
             self.initial_derivative = self.udot_rail1
@@ -1886,6 +1887,10 @@ class Flight:
         )
         return alpha, beta, stream_mach, reynolds
 
+    def __get_throttle_ratio(self):
+        """Return the current throttle ratio."""
+        return getattr(getattr(self.rocket, "throttle_control", None), "throttle", 1.0)
+
     def udot_rail1(self, t, u, post_processing=False):
         """Calculates derivative of u state vector with respect to time
         when rocket is flying in 1 DOF motion in the rail.
@@ -1909,11 +1914,11 @@ class Flight:
 
         """
         # Retrieve integration data
-        _, _, z, vx, vy, vz, e0, e1, e2, e3, _, _, _ = u
+        _, _, z, vx, vy, vz, e0, e1, e2, e3, _, _, _, propellant_mass = u
 
         # Retrieve important quantities
         # Mass
-        total_mass_at_t = self.rocket.total_mass.get_value_opt(t)
+        total_mass_at_t = self.rocket.dry_mass + propellant_mass
 
         # Get freestream speed
         free_stream_velocity = Vector(
@@ -1972,7 +1977,10 @@ class Flight:
             # Save feasible accelerations
             self.__post_processed_variables[-1][1:7] = [ax, ay, az, 0, 0, 0]
 
-        return [vx, vy, vz, ax, ay, az, 0, 0, 0, 0, 0, 0, 0]
+        propellant_mass_dot = (
+            self.rocket.motor.total_mass_flow_rate.get_value_opt(t) * throttle
+        )
+        return [vx, vy, vz, ax, ay, az, 0, 0, 0, 0, 0, 0, 0, propellant_mass_dot]
 
     def udot_rail2(self, t, u, post_processing=False):  # pragma: no cover
         """[Still not implemented] Calculates derivative of u state vector with
@@ -2022,7 +2030,7 @@ class Flight:
         """
 
         # Retrieve integration data
-        _, _, z, vx, vy, vz, e0, e1, e2, e3, omega1, omega2, omega3 = u
+        _, _, z, vx, vy, vz, e0, e1, e2, e3, omega1, omega2, omega3, _ = u
         # Determine lift force and moment
         omega1, omega2, omega3 = 0, 0, 0
         R1, R2, M1, M2, M3 = 0, 0, 0, 0, 0
@@ -2361,6 +2369,7 @@ class Flight:
             alpha1,
             alpha2,
             alpha3,
+            0.0,  # propellant_mass_dot: not throttled in solid propulsion
         ]
 
         if post_processing:
@@ -2406,7 +2415,7 @@ class Flight:
             e0_dot, e1_dot, e2_dot, e3_dot, alpha1, alpha2, alpha3].
         """
         # Unpack state
-        _, _, z, vx, vy, vz, e0, e1, e2, e3, omega1, omega2, omega3 = u
+        _, _, z, vx, vy, vz, e0, e1, e2, e3, omega1, omega2, omega3, propellant_mass = u
 
         # Define vectors
         v = Vector([vx, vy, vz])
@@ -2414,7 +2423,7 @@ class Flight:
         w = Vector([omega1, omega2, omega3])
 
         # Mass and transformation
-        total_mass = self.rocket.total_mass.get_value_opt(t)
+        total_mass = self.rocket.dry_mass + propellant_mass
         K = Matrix.transformation(e)
         Kt = K.transpose
 
@@ -2498,12 +2507,16 @@ class Flight:
 
         # Thrust and weight
         # Calculate net thrust including pressure thrust correction if motor is burning
+        throttle = self.__get_throttle_ratio()
         if self.rocket.motor.burn_start_time < t < self.rocket.motor.burn_out_time:
             pressure = self.env.pressure.get_value_opt(z)
-            net_thrust = max(
-                self.rocket.motor.thrust.get_value_opt(t)
-                + self.rocket.motor.pressure_thrust(pressure),
-                0,
+            net_thrust = (
+                max(
+                    self.rocket.motor.thrust.get_value_opt(t)
+                    + self.rocket.motor.pressure_thrust(pressure),
+                    0,
+                )
+                * throttle
             )
         else:
             net_thrust = 0
@@ -2595,7 +2608,12 @@ class Flight:
             e_dot = [0, 0, 0, 0]
             w_dot = [0, 0, 0]
 
-        u_dot = [*r_dot, *v_dot, *e_dot, *w_dot]
+        propellant_mass_dot = (
+            self.rocket.motor.total_mass_flow_rate.get_value_opt(t) * throttle
+            if self.rocket.motor.burn_start_time < t < self.rocket.motor.burn_out_time
+            else 0.0
+        )
+        u_dot = [*r_dot, *v_dot, *e_dot, *w_dot, propellant_mass_dot]
 
         if post_processing:
             self.__post_processed_variables.append(
@@ -2628,7 +2646,7 @@ class Flight:
             e0_dot, e1_dot, e2_dot, e3_dot, alpha1, alpha2, alpha3].
         """
         # Retrieve integration data
-        _, _, z, vx, vy, vz, e0, e1, e2, e3, omega1, omega2, omega3 = u
+        _, _, z, vx, vy, vz, e0, e1, e2, e3, omega1, omega2, omega3, propellant_mass = u
 
         # Create necessary vectors
         # r = Vector([x, y, z])  # CDM position vector
@@ -2636,25 +2654,47 @@ class Flight:
         e = [e0, e1, e2, e3]  # Euler parameters/quaternions
         w = Vector([omega1, omega2, omega3])  # Angular velocity vector
 
+        # Retrieve throttle
+        throttle = self.__get_throttle_ratio()
+
         # Retrieve necessary quantities
         ## Rocket mass
-        total_mass = self.rocket.total_mass.get_value_opt(t)
-        total_mass_dot = self.rocket.total_mass_flow_rate.get_value_opt(t)
-        total_mass_ddot = self.rocket.total_mass_flow_rate.differentiate_complex_step(t)
+        total_mass = self.rocket.dry_mass + propellant_mass
+        total_mass_dot = self.rocket.total_mass_flow_rate.get_value_opt(t) * throttle
+        if hasattr(self.rocket, "throttle_control"):
+            total_mass_ddot = 0.0
+        else:
+            total_mass_ddot = (
+                self.rocket.total_mass_flow_rate.differentiate_complex_step(t)
+            )
+
         ## CM position vector and time derivatives relative to CDM in body frame
-        r_CM_z = self.rocket.com_to_cdm_function
-        r_CM_t = r_CM_z.get_value_opt(t)
+        r_CM_z = self.rocket.com_to_cdm_by_propellant_mass
+        r_CM_t = r_CM_z.get_value_opt(propellant_mass)
         r_CM = Vector([0, 0, r_CM_t])
-        r_CM_dot = Vector([0, 0, r_CM_z.differentiate_complex_step(t)])
-        r_CM_ddot = Vector([0, 0, r_CM_z.differentiate(t, order=2)])
+        r_CM_dot = Vector(
+            [0, 0, r_CM_z.differentiate(propellant_mass) * total_mass_dot]
+        )
+        if hasattr(self.rocket, "throttle_control"):
+            r_CM_ddot = Vector([0, 0, 0])
+        else:
+            r_CM_ddot = Vector(
+                [0, 0, self.rocket.com_to_cdm_function.differentiate(t, order=2)]
+            )
+
         ## Nozzle position vector
         r_NOZ = Vector([0, 0, self.rocket.nozzle_to_cdm])
         ## Nozzle gyration tensor
         S_nozzle = self.rocket.nozzle_gyration_tensor
+
         ## Inertia tensor
-        inertia_tensor = self.rocket.get_inertia_tensor_at_time(t)
+        inertia_tensor = self.rocket.get_inertia_tensor_by_propellant_mass(
+            propellant_mass
+        )
         ## Inertia tensor time derivative in the body frame
-        I_dot = self.rocket.get_inertia_tensor_derivative_at_time(t)
+        I_dot = self.rocket.get_inertia_tensor_derivative_by_propellant_mass(
+            propellant_mass, total_mass_dot
+        )
 
         # Calculate the Inertia tensor relative to CM
         H = (r_CM.cross_matrix @ -r_CM.cross_matrix) * total_mass
@@ -2688,10 +2728,13 @@ class Flight:
 
         if self.rocket.motor.burn_start_time < t < self.rocket.motor.burn_out_time:
             pressure = self.env.pressure.get_value_opt(z)
-            net_thrust = max(
-                self.rocket.motor.thrust.get_value_opt(t)
-                + self.rocket.motor.pressure_thrust(pressure),
-                0,
+            net_thrust = (
+                max(
+                    self.rocket.motor.thrust.get_value_opt(t)
+                    + self.rocket.motor.pressure_thrust(pressure),
+                    0,
+                )
+                * throttle
             )
             drag_coeff = self.rocket.power_on_drag_7d(
                 alpha,
@@ -2775,13 +2818,6 @@ class Flight:
             M2 += N
             M3 += L
 
-        # Throttle control
-        throttle = getattr(
-            getattr(self.rocket, "throttle_control", None),
-            "throttle",
-            1.0,
-        )
-        effective_thrust = net_thrust * throttle
 
         # TVC (Thrust Vector Control)
         if hasattr(self.rocket, "tvc"):
@@ -2789,22 +2825,22 @@ class Flight:
             # TVC Mx My moments: M = T * sin(x) * r
             M1 += (
                 np.sin(self.rocket.tvc.gimbal_angle_x * (np.pi / 180))
-                * effective_thrust
+                * net_thrust
                 * tvc_lever
             )
             M2 += (
                 np.sin(self.rocket.tvc.gimbal_angle_y * (np.pi / 180))
-                * effective_thrust
+                * net_thrust
                 * tvc_lever
             )
             # TVC Fz thrust: F = T * sqrt(1 - sin^2(x) - sin^2(y))
-            thrust3 = effective_thrust * np.sqrt(
+            thrust3 = net_thrust * np.sqrt(
                 1
                 - np.sin(self.rocket.tvc.gimbal_angle_x * (np.pi / 180)) ** 2
                 - np.sin(self.rocket.tvc.gimbal_angle_y * (np.pi / 180)) ** 2
             )
         else:
-            thrust3 = effective_thrust
+            thrust3 = net_thrust
 
         # Off center moment
         M1 += (
@@ -2871,12 +2907,19 @@ class Flight:
         # Position vector derivative
         r_dot = [vx, vy, vz]
 
+        # Propellant mass derivative
+        propellant_mass_dot = (
+            self.rocket.motor.total_mass_flow_rate.get_value_opt(t) * throttle
+            if self.rocket.motor.burn_start_time < t < self.rocket.motor.burn_out_time
+            else 0.0
+        )
+
         # Create u_dot
-        u_dot = [*r_dot, *v_dot, *e_dot, *w_dot]
+        u_dot = [*r_dot, *v_dot, *e_dot, *w_dot, propellant_mass_dot]
 
         if post_processing:
             self.__post_processed_variables.append(
-                [t, *v_dot, *w_dot, R1, R2, R3, M1, M2, M3, effective_thrust]
+                [t, *v_dot, *w_dot, R1, R2, R3, M1, M2, M3, net_thrust]
             )
 
         return u_dot
@@ -2965,7 +3008,7 @@ class Flight:
                 [t, ax, ay, az, 0, 0, 0, Dx, Dy, Dz, 0, 0, 0, 0]
             )
 
-        return [vx, vy, vz, ax, ay, az, 0, 0, 0, 0, 0, 0, 0]
+        return [vx, vy, vz, ax, ay, az, 0, 0, 0, 0, 0, 0, 0, 0.0]
 
     @cached_property
     def solution_array(self):
@@ -3110,6 +3153,12 @@ class Flight:
         body frame as a function of time, in rad/s. Sometimes referred to as
         roll rate (p)."""
         return self.solution_array[:, [0, 13]]
+
+    @funcify_method("Time (s)", "Propellant mass (kg)", "spline", "zero")
+    def propellant_mass(self):
+        """Propellant mass as a function of time, in kg. This is the
+        integrated state variable from the ODE."""
+        return self.solution_array[:, [0, 14]]
 
     # Process second type of outputs - accelerations components
     @funcify_method("Time (s)", "Ax (m/s²)", "spline", "zero")

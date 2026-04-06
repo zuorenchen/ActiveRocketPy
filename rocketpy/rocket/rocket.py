@@ -563,7 +563,17 @@ class Rocket:
         self.center_of_mass.set_title(
             "Center of Mass Position (Rocket + Motor + Propellant)"
         )
-        return self.center_of_mass
+
+        _t = self.motor.propellant_mass.x_array
+        _masses = self.motor.propellant_mass.get_value(_t)
+        self.center_of_mass_by_propellant_mass = Function(
+            np.column_stack([_masses, self.center_of_mass.get_value(_t)]),
+            "Propellant Mass (kg)",
+            "Center of Mass Position (m)",
+            "spline",
+            "constant",
+        )
+        return self.center_of_mass, self.center_of_mass_by_propellant_mass
 
     def evaluate_center_of_dry_mass(self):
         """Evaluates the rocket's center of dry mass (i.e. rocket with motor but
@@ -862,6 +872,42 @@ class Rocket:
             Float value corresponding to rocket inertia tensor 33
             component, which corresponds to the inertia relative to the
             e_3 axis, centered at the center of dry mass.
+        self.I_12 : float
+            Float value corresponding to rocket inertia tensor 12
+            component, which corresponds to the inertia relative to the
+            e_1 and e_2 axes, centered at the center of dry mass.
+        self.I_13 : float
+            Float value corresponding to rocket inertia tensor 13
+            component, which corresponds to the inertia relative to the
+            e_1 and e_3 axes, centered at the center of dry mass.
+        self.I_23 : float
+            Float value corresponding to rocket inertia tensor 23
+            component, which corresponds to the inertia relative to the
+            e_2 and e_3 axes, centered at the center of dry mass.
+        self.I_11_by_propellant_mass : Function
+            Function of propellant mass expressing the rocket inertia tensor 11
+            component, which corresponds to the inertia relative to the
+            e_1 axis, centered at the center of dry mass.
+        self.I_22_by_propellant_mass : Function
+            Function of propellant mass expressing the rocket inertia tensor 22
+            component, which corresponds to the inertia relative to the
+            e_2 axis, centered at the center of dry mass.
+        self.I_33_by_propellant_mass : Function
+            Function of propellant mass expressing the rocket inertia tensor 33
+            component, which corresponds to the inertia relative to the
+            e_3 axis, centered at the center of dry mass.
+        self.I_12_by_propellant_mass : Function
+            Function of propellant mass expressing the rocket inertia tensor 12
+            component, which corresponds to the inertia relative to the
+            e_1 and e_2 axes, centered at the center of dry mass.
+        self.I_13_by_propellant_mass : Function
+            Function of propellant mass expressing the rocket inertia tensor 13
+            component, which corresponds to the inertia relative to the
+            e_1 and e_3 axes, centered at the center of dry mass.
+        self.I_23_by_propellant_mass : Function
+            Function of propellant mass expressing the rocket inertia tensor 23
+            component, which corresponds to the inertia relative to the
+            e_2 and e_3 axes, centered at the center of dry mass.
 
         Notes
         -----
@@ -898,6 +944,52 @@ class Rocket:
         self.I_13 = self.dry_I_13 + self.motor.propellant_I_13
         self.I_23 = self.dry_I_23 + self.motor.propellant_I_23
 
+        # Build by-mass parameterizations directly from the time-based Functions.
+        _t = self.motor.propellant_mass.x_array
+        _masses = self.motor.propellant_mass.get_value(_t)
+        self.I_11_by_propellant_mass = Function(
+            np.column_stack([_masses, self.I_11.get_value(_t)]),
+            "Propellant Mass (kg)",
+            "Inertia I_11 (kg m²)",
+            "spline",
+            "constant",
+        )
+        self.I_22_by_propellant_mass = Function(
+            np.column_stack([_masses, self.I_22.get_value(_t)]),
+            "Propellant Mass (kg)",
+            "Inertia I_22 (kg m²)",
+            "spline",
+            "constant",
+        )
+        self.I_33_by_propellant_mass = Function(
+            np.column_stack([_masses, self.I_33.get_value(_t)]),
+            "Propellant Mass (kg)",
+            "Inertia I_33 (kg m²)",
+            "spline",
+            "constant",
+        )
+        self.I_12_by_propellant_mass = Function(
+            np.column_stack([_masses, self.I_12.get_value(_t)]),
+            "Propellant Mass (kg)",
+            "Inertia I_12 (kg m²)",
+            "spline",
+            "constant",
+        )
+        self.I_13_by_propellant_mass = Function(
+            np.column_stack([_masses, self.I_13.get_value(_t)]),
+            "Propellant Mass (kg)",
+            "Inertia I_13 (kg m²)",
+            "spline",
+            "constant",
+        )
+        self.I_23_by_propellant_mass = Function(
+            np.column_stack([_masses, self.I_23.get_value(_t)]),
+            "Propellant Mass (kg)",
+            "Inertia I_23 (kg m²)",
+            "spline",
+            "constant",
+        )
+
         # Return inertias
         return (
             self.I_11,
@@ -906,6 +998,12 @@ class Rocket:
             self.I_12,
             self.I_13,
             self.I_23,
+            self.I_11_by_propellant_mass,
+            self.I_22_by_propellant_mass,
+            self.I_33_by_propellant_mass,
+            self.I_12_by_propellant_mass,
+            self.I_13_by_propellant_mass,
+            self.I_23_by_propellant_mass,
         )
 
     def evaluate_nozzle_to_cdm(self):
@@ -961,6 +1059,9 @@ class Rocket:
         self.com_to_cdm_function : Function
             Function of time expressing the z-coordinate of the center of mass
             relative to the center of dry mass.
+        self.com_to_cdm_by_propellant_mass : Function
+            Function of propellant mass expressing the z-coordinate of the center
+            of mass relative to the center of dry mass.
         """
         self.com_to_cdm_function = (
             -1
@@ -974,7 +1075,19 @@ class Rocket:
         self.com_to_cdm_function.set_inputs("Time (s)")
         self.com_to_cdm_function.set_outputs("Z Coordinate COM to CDM (m)")
         self.com_to_cdm_function.set_title("Z Coordinate COM to CDM")
-        return self.com_to_cdm_function
+
+        # Build the by-mass parameterization directly.
+        _t = self.motor.propellant_mass.x_array
+        _masses = self.motor.propellant_mass.get_value(_t)
+        self.com_to_cdm_by_propellant_mass = Function(
+            np.column_stack([_masses, self.com_to_cdm_function.get_value(_t)]),
+            "Propellant Mass (kg)",
+            "Z Coordinate COM to CDM (m)",
+            "spline",
+            "constant",
+        )
+
+        return self.com_to_cdm_function, self.com_to_cdm_by_propellant_mass
 
     def get_inertia_tensor_at_time(self, t):
         """Returns a Matrix representing the inertia tensor of the rocket with
@@ -1028,6 +1141,81 @@ class Rocket:
         I_22_dot = self.I_22.differentiate_complex_step(t)
         I_23_dot = self.I_23.differentiate_complex_step(t)
         I_33_dot = self.I_33.differentiate_complex_step(t)
+        return Matrix(
+            [
+                [I_11_dot, I_12_dot, I_13_dot],
+                [I_12_dot, I_22_dot, I_23_dot],
+                [I_13_dot, I_23_dot, I_33_dot],
+            ]
+        )
+
+    def get_inertia_tensor_by_propellant_mass(self, propellant_mass):
+        """Returns the rocket's inertia tensor Matrix evaluated at a given
+        propellant mass, using the pre-built by-mass parameterizations.
+
+        Parameters
+        ----------
+        propellant_mass : float
+            Current propellant mass in kg.
+
+        Returns
+        -------
+        Matrix
+            Inertia tensor of the rocket at the given propellant mass,
+            relative to the center of dry mass.
+        """
+        I_11 = self.I_11_by_propellant_mass.get_value_opt(propellant_mass)
+        I_22 = self.I_22_by_propellant_mass.get_value_opt(propellant_mass)
+        I_33 = self.I_33_by_propellant_mass.get_value_opt(propellant_mass)
+        I_12 = self.I_12_by_propellant_mass.get_value_opt(propellant_mass)
+        I_13 = self.I_13_by_propellant_mass.get_value_opt(propellant_mass)
+        I_23 = self.I_23_by_propellant_mass.get_value_opt(propellant_mass)
+        return Matrix(
+            [
+                [I_11, I_12, I_13],
+                [I_12, I_22, I_23],
+                [I_13, I_23, I_33],
+            ]
+        )
+
+    def get_inertia_tensor_derivative_by_propellant_mass(
+        self, propellant_mass, mass_dot
+    ):
+        """Returns the time derivative of the rocket's inertia tensor Matrix
+        evaluated at a given propellant mass, using the pre-built by-mass
+        parameterizations and the chain rule.
+
+        Parameters
+        ----------
+        propellant_mass : float
+            Current propellant mass in kg.
+        mass_dot : float
+            Time derivative of the propellant mass in kg/s.
+
+        Returns
+        -------
+        Matrix
+            Time derivative of the inertia tensor of the rocket at the given
+            propellant mass, relative to the center of dry mass.
+        """
+        I_11_dot = (
+            self.I_11_by_propellant_mass.differentiate(propellant_mass) * mass_dot
+        )
+        I_22_dot = (
+            self.I_22_by_propellant_mass.differentiate(propellant_mass) * mass_dot
+        )
+        I_33_dot = (
+            self.I_33_by_propellant_mass.differentiate(propellant_mass) * mass_dot
+        )
+        I_12_dot = (
+            self.I_12_by_propellant_mass.differentiate(propellant_mass) * mass_dot
+        )
+        I_13_dot = (
+            self.I_13_by_propellant_mass.differentiate(propellant_mass) * mass_dot
+        )
+        I_23_dot = (
+            self.I_23_by_propellant_mass.differentiate(propellant_mass) * mass_dot
+        )
         return Matrix(
             [
                 [I_11_dot, I_12_dot, I_13_dot],

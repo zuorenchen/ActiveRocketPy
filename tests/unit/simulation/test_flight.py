@@ -634,7 +634,7 @@ def test_stability_static_margins(
     init_vel = [0, 0, 100]  # Start at 100 m/s
     init_att = [1, 0, 0, 0]  # Inclination of 90 deg and heading of 0 deg
     init_angvel = [0, 0, 0]
-    initial_solution = [0] + init_pos + init_vel + init_att + init_angvel
+    initial_solution = [0] + init_pos + init_vel + init_att + init_angvel + [0.0]
     test_flight = Flight(
         rocket=dummy_rocket,
         rail_length=1,

@@ -345,6 +345,7 @@ def test_initial_solution(mock_show, example_plain_env, calisto_robust):  # pyli
             0.0,
             0.0,
             0.0,
+            0.0,  # propellant_mass (zero = motorless start)
         ],
     )
 
@@ -372,6 +373,7 @@ def test_empty_motor_flight(mock_show, example_plain_env, calisto_motorless):  #
             0.25418555574446716,
             0.03632002739509155,
             2.0747266017020563,
+            0.0,  # propellant_mass (motor burned out)
         ],
     )
     assert flight.all_info() is None

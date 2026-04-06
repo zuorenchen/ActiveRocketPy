@@ -145,7 +145,7 @@ def test_u_dot_generalized_3dof_returns_valid_result(flight_3dof):
 
     """
     flight = flight_3dof
-    u = [0] * 13  # Generalized state vector size
+    u = [0] * 14  # Generalized state vector size (13 DOF + propellant_mass)
     result = flight.u_dot_generalized_3dof(0, u)
     assert isinstance(result, (list, np.ndarray))
 
@@ -224,7 +224,7 @@ def test_point_mass_rocket_3dof_uses_7d_drag_inputs(
     )
 
     t = 10.0
-    u = [0, 0, 100, 50, 5, 0, 1, 0, 0, 0, 0.3, -0.2, 0.1]
+    u = [0, 0, 100, 50, 5, 0, 1, 0, 0, 0, 0.3, -0.2, 0.1, 0.0]
     u_dot = flight.u_dot_generalized_3dof(t, u)
 
     z = u[2]
@@ -276,7 +276,7 @@ def test_weathercock_zero_gives_fixed_attitude(flight_weathercock_zero):
     flight = flight_weathercock_zero
     # Create a state vector with non-zero velocity (to have freestream)
     # [x, y, z, vx, vy, vz, e0, e1, e2, e3, w1, w2, w3]
-    u = [0, 0, 100, 10, 5, 50, 1, 0, 0, 0, 0, 0, 0]
+    u = [0, 0, 100, 10, 5, 50, 1, 0, 0, 0, 0, 0, 0, 0.0]
     result = flight.u_dot_generalized_3dof(0, u)
 
     # Quaternion derivatives (indices 6-9) should be zero
@@ -298,7 +298,7 @@ def test_weathercock_nonzero_evolves_attitude(flight_weathercock_pos):
     # Create a state with misaligned body axis
     # Body pointing straight up (e0=1, e1=e2=e3=0) but velocity is horizontal
     # [x, y, z, vx, vy, vz, e0, e1, e2, e3, w1, w2, w3]
-    u = [0, 0, 100, 50, 0, 0, 1, 0, 0, 0, 0, 0, 0]
+    u = [0, 0, 100, 50, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0.0]
     result = flight.u_dot_generalized_3dof(0, u)
 
     # With misalignment, quaternion derivatives should be non-zero
@@ -323,7 +323,7 @@ def test_weathercock_aligned_no_evolution(flight_weathercock_pos):
     # e0=cos(90°/2)=cos(45°), e2=sin(90°/2)=sin(45°)
     sqrt2_2 = np.sqrt(2) / 2
     # [x, y, z, vx, vy, vz, e0, e1, e2, e3, w1, w2, w3]
-    u = [0, 0, 100, 50, 0, 0, sqrt2_2, 0, sqrt2_2, 0, 0, 0, 0]
+    u = [0, 0, 100, 50, 0, 0, sqrt2_2, 0, sqrt2_2, 0, 0, 0, 0, 0.0]
     result = flight.u_dot_generalized_3dof(0, u)
 
     # With alignment, quaternion derivatives should be very small
@@ -353,7 +353,7 @@ def test_weathercock_anti_aligned_uses_perp_axis_and_evolves(flight_weathercock_
 
     # State: [x, y, z, vx, vy, vz, e0, e1, e2, e3, w1, w2, w3]
     # Set velocity so desired_direction becomes [1,0,0]
-    u = [0, 0, 100, 50, 0, 0, e0, e1, e2, e3, 0, 0, 0]
+    u = [0, 0, 100, 50, 0, 0, e0, e1, e2, e3, 0, 0, 0, 0.0]
 
     result = flight.u_dot_generalized_3dof(0, u)
 
