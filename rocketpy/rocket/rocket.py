@@ -1836,8 +1836,8 @@ class Rocket:
         clamp=True,
         initial_observed_variables=None,
         return_controller=False,
-        actuator_tau_x=True,
-        actuator_tau_y=True,
+        actuator_tau_x=None,
+        actuator_tau_y=None,
         name="TVC",
         controller_name="TVC Controller",
     ):
@@ -2094,7 +2094,7 @@ class Rocket:
         throttle_rate_limit=0,
         initial_observed_variables=None,
         return_controller=False,
-        actuator_tau=True,
+        actuator_tau=None,
         name="Throttle Control",
         controller_name="Throttle Controller",
     ):

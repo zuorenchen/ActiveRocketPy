@@ -33,7 +33,7 @@ class ThrottleControl:
         throttle_rate_limit=0,
         clamp=True,
         throttle=1.0,
-        actuator_tau=True,
+        actuator_tau=None,
         name="Throttle Control",
     ):
         """Initializes the ThrottleControl class.

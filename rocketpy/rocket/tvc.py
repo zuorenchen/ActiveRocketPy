@@ -39,8 +39,8 @@ class TVC:
         clamp=True,
         gimbal_angle_x=0.0,
         gimbal_angle_y=0.0,
-        actuator_tau_x=True,
-        actuator_tau_y=True,
+        actuator_tau_x=None,
+        actuator_tau_y=None,
         name="TVC",
     ):
         """Initializes the TVC class.
