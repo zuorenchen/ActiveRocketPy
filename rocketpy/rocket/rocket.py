@@ -1836,6 +1836,8 @@ class Rocket:
         clamp=True,
         initial_observed_variables=None,
         return_controller=False,
+        actuator_tau_x=True,
+        actuator_tau_y=True,
         name="TVC",
         controller_name="TVC Controller",
     ):
@@ -1902,6 +1904,12 @@ class Rocket:
         return_controller : bool, optional
             If True, the function will return the controller object created.
             Default is False.
+        actuator_tau_x : float, optional
+            Time constant for the x-axis actuator dynamics in seconds.
+            If None, no actuator dynamics are applied on the x axis.
+        actuator_tau_y : float, optional
+            Time constant for the y-axis actuator dynamics in seconds.
+            If None, no actuator dynamics are applied on the y axis.
         name : string, optional
             TVC system name. Has no impact in simulation, as it is only used to
             display data in a more organized matter. Default is "TVC".
@@ -1935,6 +1943,8 @@ class Rocket:
             clamp=clamp,
             gimbal_angle_x=0,
             gimbal_angle_y=0,
+            actuator_tau_x=actuator_tau_x,
+            actuator_tau_y=actuator_tau_y,
             name=name,
         )
         _controller = _Controller(
@@ -2084,6 +2094,7 @@ class Rocket:
         throttle_rate_limit=0,
         initial_observed_variables=None,
         return_controller=False,
+        actuator_tau=True,
         name="Throttle Control",
         controller_name="Throttle Controller",
     ):
@@ -2144,6 +2155,9 @@ class Rocket:
         throttle_rate_limit : float, optional
             Maximum throttle rate in 1/s. Throttle is limited to this rate.
             Must be non-negative. Default is 0 (no throttle change limit).
+        actuator_tau : float, optional
+            Time constant for the throttle actuator dynamics in seconds.
+            If None, no actuator dynamics are applied.
         initial_observed_variables : list, optional
             A list of the initial values of the variables that the controller
             function manages. This list is used to initialize the
@@ -2186,6 +2200,7 @@ class Rocket:
             clamp=clamp,
             sampling_rate=sampling_rate,
             throttle_rate_limit=throttle_rate_limit,
+            actuator_tau=actuator_tau,
             name=name,
         )
 

@@ -33,6 +33,7 @@ class ThrottleControl:
         throttle_rate_limit=0,
         clamp=True,
         throttle=1.0,
+        actuator_tau=True,
         name="Throttle Control",
     ):
         """Initializes the ThrottleControl class.
@@ -55,6 +56,10 @@ class ThrottleControl:
             exceeds the range. Default is True.
         throttle : float, optional
             Initial throttle value. Default is 1.0 (full throttle).
+        actuator_tau : float, optional
+            Time constant for the actuator dynamics (first-order IIR filter)
+            in seconds. If None, no actuator dynamics are applied.
+            Must be non-negative. Default is None.
         name : str, optional
             Name of the throttle control system. Default is "Throttle Control".
 
@@ -71,10 +76,29 @@ class ThrottleControl:
         assert throttle_rate_limit >= 0, "throttle_rate_limit must be non-negative."
         self.throttle_rate_limit = throttle_rate_limit
         self.clamp = clamp
+        # Actuator dynamics parameters
+        if actuator_tau is not None:
+            assert actuator_tau >= 0, "actuator_tau must be non-negative."
+        self.actuator_tau = actuator_tau
+        # Compute IIR filter coefficients (first-order system)
+        self._update_iir_coefficients()
         self.initial_throttle = throttle
         self.throttle_prev = throttle
+        self.throttle_filtered = throttle
         self.throttle = throttle
         self.prints = _ThrottleControlPrints(self)
+
+    def _update_iir_coefficients(self):
+        """Updates the IIR filter coefficient based on time constant and
+        sampling rate. Uses first-order discrete-time system:
+        y[n] = alpha * u[n] + (1 - alpha) * y[n-1]
+        where alpha = Ts / (tau + Ts)
+        """
+        sampling_period = 1.0 / self.sampling_rate
+        if self.actuator_tau is not None and self.actuator_tau > 0:
+            self._alpha = sampling_period / (self.actuator_tau + sampling_period)
+        else:
+            self._alpha = 1.0  # No filtering, direct pass-through
 
     @property
     def throttle(self):
@@ -105,14 +129,19 @@ class ThrottleControl:
         if abs(throttle_change) > max_throttle_change:
             value = self.throttle_prev + np.sign(throttle_change) * max_throttle_change
         self.throttle_prev = value
-        self._throttle = value
+        # Apply first-order IIR actuator dynamics
+        self.throttle_filtered = (
+            self._alpha * value + (1 - self._alpha) * self.throttle_filtered
+        )
+        self._throttle = self.throttle_filtered
 
     def _reset(self):
         """Resets the throttle control system to its initial state. This method
         is called at the beginning of each simulation to ensure the throttle
         control system is in the correct state."""
-        self.throttle = self.initial_throttle
         self.throttle_prev = self.initial_throttle
+        self.throttle_filtered = self.initial_throttle
+        self.throttle = self.initial_throttle
 
     def info(self):
         """Prints summarized information of the throttle control system.
@@ -130,6 +159,7 @@ class ThrottleControl:
             "throttle_rate_limit": self.throttle_rate_limit,
             "clamp": self.clamp,
             "throttle": self.throttle,
+            "actuator_tau": self.actuator_tau,
             "name": self.name,
         }
 
@@ -141,5 +171,6 @@ class ThrottleControl:
             throttle_rate_limit=data.get("throttle_rate_limit"),
             clamp=data.get("clamp"),
             throttle=data.get("throttle"),
+            actuator_tau=data.get("actuator_tau"),
             name=data.get("name"),
         )

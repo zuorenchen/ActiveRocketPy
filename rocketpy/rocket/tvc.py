@@ -39,6 +39,8 @@ class TVC:
         clamp=True,
         gimbal_angle_x=0.0,
         gimbal_angle_y=0.0,
+        actuator_tau_x=True,
+        actuator_tau_y=True,
         name="TVC",
     ):
         """Initializes the TVC class.
@@ -66,6 +68,14 @@ class TVC:
         gimbal_angle_y : float, optional
             Initial gimbal angle around the y-axis (yaw) in degrees.
             Default is 0.0 (no deflection).
+        actuator_tau_x : float, optional
+            Time constant for the x-axis actuator dynamics (first-order IIR
+            filter) in seconds. If None, no actuator dynamics are applied.
+            Must be non-negative. Default is None.
+        actuator_tau_y : float, optional
+            Time constant for the y-axis actuator dynamics (first-order IIR
+            filter) in seconds. If None, no actuator dynamics are applied.
+            Must be non-negative. Default is None.
         name : str, optional
             Name of the TVC system. Default is "TVC".
 
@@ -80,13 +90,42 @@ class TVC:
         assert gimbal_rate_limit >= 0, "gimbal_rate_limit must be non-negative."
         self.gimbal_rate_limit = gimbal_rate_limit
         self.clamp = clamp
+        # Actuator dynamics parameters
+        if actuator_tau_x is not None:
+            assert actuator_tau_x >= 0, "actuator_tau_x must be non-negative."
+        if actuator_tau_y is not None:
+            assert actuator_tau_y >= 0, "actuator_tau_y must be non-negative."
+        self.actuator_tau_x = actuator_tau_x
+        self.actuator_tau_y = actuator_tau_y
+        # Compute IIR filter coefficients (first-order system)
+        self._update_iir_coefficients()
         self.initial_gimbal_angle_x = gimbal_angle_x
         self.initial_gimbal_angle_y = gimbal_angle_y
         self.gimbal_angle_x_prev = gimbal_angle_x
         self.gimbal_angle_y_prev = gimbal_angle_y
+        self.gimbal_angle_x_filtered = gimbal_angle_x
+        self.gimbal_angle_y_filtered = gimbal_angle_y
         self.gimbal_angle_x = gimbal_angle_x
         self.gimbal_angle_y = gimbal_angle_y
         self.prints = _TVCPrints(self)
+
+    def _update_iir_coefficients(self):
+        """Updates the IIR filter coefficients based on time constants and
+        sampling rate. Uses first-order discrete-time system:
+        y[n] = alpha * u[n] + (1 - alpha) * y[n-1]
+        where alpha = Ts / (tau + Ts)
+        """
+        sampling_period = 1.0 / self.sampling_rate
+        # X-axis coefficients
+        if self.actuator_tau_x is not None and self.actuator_tau_x > 0:
+            self._alpha_x = sampling_period / (self.actuator_tau_x + sampling_period)
+        else:
+            self._alpha_x = 1.0  # No filtering, direct pass-through
+        # Y-axis coefficients
+        if self.actuator_tau_y is not None and self.actuator_tau_y > 0:
+            self._alpha_y = sampling_period / (self.actuator_tau_y + sampling_period)
+        else:
+            self._alpha_y = 1.0  # No filtering, direct pass-through
 
     @property
     def gimbal_angle_x(self):
@@ -111,7 +150,11 @@ class TVC:
         if abs(angle_change) > max_angle_change:
             value = self.gimbal_angle_x_prev + np.sign(angle_change) * max_angle_change
         self.gimbal_angle_x_prev = value
-        self._gimbal_angle_x = value
+        # Apply first-order IIR actuator dynamics
+        self.gimbal_angle_x_filtered = (
+            self._alpha_x * value + (1 - self._alpha_x) * self.gimbal_angle_x_filtered
+        )
+        self._gimbal_angle_x = self.gimbal_angle_x_filtered
 
     @property
     def gimbal_angle_y(self):
@@ -136,7 +179,11 @@ class TVC:
         if abs(angle_change) > max_angle_change:
             value = self.gimbal_angle_y_prev + np.sign(angle_change) * max_angle_change
         self.gimbal_angle_y_prev = value
-        self._gimbal_angle_y = value
+        # Apply first-order IIR actuator dynamics
+        self.gimbal_angle_y_filtered = (
+            self._alpha_y * value + (1 - self._alpha_y) * self.gimbal_angle_y_filtered
+        )
+        self._gimbal_angle_y = self.gimbal_angle_y_filtered
 
     @property
     def gimbal_angles(self):
@@ -159,10 +206,12 @@ class TVC:
         """Resets the TVC system to its initial state. This method is called
         at the beginning of each simulation to ensure the TVC system is in
         the correct state."""
-        self.gimbal_angle_x = self.initial_gimbal_angle_x
-        self.gimbal_angle_y = self.initial_gimbal_angle_y
         self.gimbal_angle_x_prev = self.initial_gimbal_angle_x
         self.gimbal_angle_y_prev = self.initial_gimbal_angle_y
+        self.gimbal_angle_x_filtered = self.initial_gimbal_angle_x
+        self.gimbal_angle_y_filtered = self.initial_gimbal_angle_y
+        self.gimbal_angle_x = self.initial_gimbal_angle_x
+        self.gimbal_angle_y = self.initial_gimbal_angle_y
 
     def info(self):
         """Prints summarized information of the TVC system.
@@ -190,6 +239,8 @@ class TVC:
             "clamp": self.clamp,
             "gimbal_angle_x": self.initial_gimbal_angle_x,
             "gimbal_angle_y": self.initial_gimbal_angle_y,
+            "actuator_tau_x": self.actuator_tau_x,
+            "actuator_tau_y": self.actuator_tau_y,
             "name": self.name,
         }
 
@@ -202,5 +253,7 @@ class TVC:
             clamp=data.get("clamp"),
             gimbal_angle_x=data.get("gimbal_angle_x"),
             gimbal_angle_y=data.get("gimbal_angle_y"),
+            actuator_tau_x=data.get("actuator_tau_x"),
+            actuator_tau_y=data.get("actuator_tau_y"),
             name=data.get("name"),
         )
