@@ -35,6 +35,7 @@ class RollControl:
         clamp=True,
         roll_torque=0.0,
         name="Roll Control",
+        actuator_tau=None,
     ):
         """Initializes the RollControl class.
 
@@ -57,6 +58,10 @@ class RollControl:
             Initial roll torque in N·m. Default is 0.0 (no torque).
         name : str, optional
             Name of the roll control system. Default is "Roll Control".
+        actuator_tau : float, optional
+            Time constant for the torque actuator dynamics (first-order IIR
+            filter) in seconds. If None, no actuator dynamics are applied.
+            Must be non-negative. Default is None.
 
         Returns
         -------
@@ -69,10 +74,29 @@ class RollControl:
         assert torque_rate_limit >= 0, "torque_rate_limit must be non-negative."
         self.torque_rate_limit = torque_rate_limit
         self.clamp = clamp
+        # Actuator dynamics parameters
+        if actuator_tau is not None:
+            assert actuator_tau >= 0, "actuator_tau must be non-negative."
+        self.actuator_tau = actuator_tau
+        # Compute IIR filter coefficients (first-order system)
+        self._update_iir_coefficients()
         self.initial_roll_torque = roll_torque
         self.roll_torque_prev = roll_torque
+        self.roll_torque_filtered = roll_torque
         self.roll_torque = roll_torque
         self.prints = _RollControlPrints(self)
+
+    def _update_iir_coefficients(self):
+        """Updates the IIR filter coefficient based on time constant and
+        sampling rate. Uses first-order discrete-time system:
+        y[n] = alpha * u[n] + (1 - alpha) * y[n-1]
+        where alpha = Ts / (tau + Ts)
+        """
+        sampling_period = 1.0 / self.sampling_rate
+        if self.actuator_tau is not None and self.actuator_tau > 0:
+            self._alpha = sampling_period / (self.actuator_tau + sampling_period)
+        else:
+            self._alpha = 1.0  # No filtering, direct pass-through
 
     @property
     def roll_torque(self):
@@ -103,14 +127,19 @@ class RollControl:
         if abs(torque_change) > max_torque_change:
             value = self.roll_torque_prev + np.sign(torque_change) * max_torque_change
         self.roll_torque_prev = value
-        self._roll_torque = value
+        # Apply first-order IIR actuator dynamics
+        self.roll_torque_filtered = (
+            self._alpha * value + (1 - self._alpha) * self.roll_torque_filtered
+        )
+        self._roll_torque = self.roll_torque_filtered
 
     def _reset(self):
         """Resets the roll control system to its initial state. This method
         is called at the beginning of each simulation to ensure the roll
         control system is in the correct state."""
-        self.roll_torque = self.initial_roll_torque
         self.roll_torque_prev = self.initial_roll_torque
+        self.roll_torque_filtered = self.initial_roll_torque
+        self.roll_torque = self.initial_roll_torque
 
     def info(self):
         """Prints summarized information of the roll control system.
@@ -137,6 +166,7 @@ class RollControl:
             "torque_rate_limit": self.torque_rate_limit,
             "clamp": self.clamp,
             "roll_torque": self.initial_roll_torque,
+            "actuator_tau": self.actuator_tau,
             "name": self.name,
         }
 
@@ -148,5 +178,6 @@ class RollControl:
             torque_rate_limit=data.get("torque_rate_limit"),
             clamp=data.get("clamp"),
             roll_torque=data.get("roll_torque"),
+            actuator_tau=data.get("actuator_tau"),
             name=data.get("name"),
         )

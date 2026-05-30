@@ -1972,6 +1972,7 @@ class Rocket:
         return_controller=False,
         name="Roll Control",
         controller_name="Roll Control Controller",
+        actuator_tau=None,
     ):
         """Creates a new roll control system, storing its parameters such as
         maximum roll torque, controller function, and sampling rate.
@@ -2042,6 +2043,9 @@ class Rocket:
             Controller name. Has no impact in simulation, as it is only used to
             display data in a more organized matter. Default is
             "Roll Control Controller".
+        actuator_tau : float, optional
+            Time constant for the roll torque actuator dynamics in seconds.
+            If None, no actuator dynamics are applied.
 
         Returns
         -------
@@ -2068,6 +2072,7 @@ class Rocket:
             torque_rate_limit=torque_rate_limit,
             clamp=clamp,
             roll_torque=0,
+            actuator_tau=actuator_tau,
             name=name,
         )
         _controller = _Controller(
