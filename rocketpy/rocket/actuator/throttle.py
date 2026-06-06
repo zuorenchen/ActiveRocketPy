@@ -41,10 +41,10 @@ class ThrottleActuator(Actuator):
         self,
         name="Throttle Control",
         demand_rate=100,
-        max_throttle=1,
+        throttle_range=(0, 1),
         throttle_rate_limit=None,
         clamp=True,
-        initial_throttle=0.0,
+        initial_throttle=1.0,
         throttle_time_constant=None,
     ):
         """Initializes the ThrottleActuator class.
@@ -56,19 +56,18 @@ class ThrottleActuator(Actuator):
         demand_rate : int, optional
             Demand rate of the throttle actuator in Hz. Default is 100 Hz.
             None indicates a continuous-time actuator.
-        max_throttle : float, int
-            Maximum throttle value. Must be non-negative.
-            Default is 1 (full throttle).
+        throttle_range : tuple, optional
+            A tuple containing the minimum and maximum throttle values. Default is (0.0, 1.0).
         throttle_rate_limit : float, int
             Maximum throttle rate in 1/s. Throttle is limited to this
             rate. Must be non-negative. Default is None (no limit). demand_rate must be specified if throttle_rate_limit is not None.
         clamp : bool, optional
             If True, the simulation will clamp throttle to the range
-            [0, max_throttle] if it exceeds this range.
+            [throttle_range[0], throttle_range[1]] if it exceeds this range.
             If False, the simulation will issue a warning if throttle
             exceeds the maximum value. Default is True.
         initial_throttle : float, optional
-            Initial throttle value. Default is 0.0 (no thrust).
+            Initial throttle value. Default is 1.0 (full thrust).
         throttle_time_constant : float, optional
             Time constant for the throttle actuator dynamics (first-order IIR
             filter) in seconds. If None, no actuator dynamics are applied.
@@ -81,7 +80,7 @@ class ThrottleActuator(Actuator):
         super().__init__(
             name=name,
             demand_rate=demand_rate,
-            actuator_range=(0, max_throttle),
+            actuator_range=throttle_range,
             actuator_rate_limit=throttle_rate_limit,
             clamp=clamp,
             actuator_initial_output=initial_throttle,
@@ -121,7 +120,7 @@ class ThrottleActuator(Actuator):
         return {
             "name": self.name,
             "demand_rate": self.demand_rate,
-            "max_throttle": self.actuator_range[1],
+            "throttle_range": self.actuator_range,
             "throttle_rate_limit": self.actuator_rate_limit,
             "clamp": self.clamp,
             "initial_throttle": self.actuator_initial_output,
@@ -133,7 +132,10 @@ class ThrottleActuator(Actuator):
         return cls(
             name=data.get("name"),
             demand_rate=data.get("demand_rate"),
-            max_throttle=data.get("max_throttle"),
+            throttle_range=(
+                data.get("throttle_range")[0],
+                data.get("throttle_range")[1],
+            ),
             throttle_rate_limit=data.get("throttle_rate_limit"),
             clamp=data.get("clamp"),
             initial_throttle=data.get("initial_throttle"),
