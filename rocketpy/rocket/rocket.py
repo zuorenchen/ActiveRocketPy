@@ -25,9 +25,9 @@ from rocketpy.rocket.aero_surface.fins.free_form_fins import FreeFormFins
 from rocketpy.rocket.aero_surface.generic_surface import GenericSurface
 from rocketpy.rocket.components import Components
 from rocketpy.rocket.parachute import Parachute
-from rocketpy.rocket.roll_control import RollControl
-from rocketpy.rocket.throttle_control import ThrottleControl
-from rocketpy.rocket.tvc import TVC
+from rocketpy.rocket.actuator.roll import RollActuator
+from rocketpy.rocket.actuator.throttle import ThrottleActuator
+from rocketpy.rocket.actuator.thrust_vector import ThrustVectorActuator
 from rocketpy.tools import (
     deprecated,
     find_obj_from_hash,
@@ -1933,10 +1933,10 @@ class Rocket:
             self._controllers = [
                 controller
                 for controller in self._controllers
-                if not isinstance(controller.interactive_objects, TVC)
+                if not isinstance(controller.interactive_objects, ThrustVectorActuator)
             ]
 
-        tvc = TVC(
+        tvc = ThrustVectorActuator(
             sampling_rate=sampling_rate,
             gimbal_range=gimbal_range,
             gimbal_rate_limit=gimbal_rate_limit,
@@ -2063,10 +2063,10 @@ class Rocket:
             self._controllers = [
                 controller
                 for controller in self._controllers
-                if not isinstance(controller.interactive_objects, RollControl)
+                if not isinstance(controller.interactive_objects, RollActuator)
             ]
 
-        roll_control = RollControl(
+        roll_control = RollActuator(
             sampling_rate=sampling_rate,
             max_roll_torque=max_roll_torque,
             torque_rate_limit=torque_rate_limit,
@@ -2196,10 +2196,10 @@ class Rocket:
             self._controllers = [
                 controller
                 for controller in self._controllers
-                if not isinstance(controller.interactive_objects, ThrottleControl)
+                if not isinstance(controller.interactive_objects, ThrottleActuator)
             ]
 
-        throttle_control = ThrottleControl(
+        throttle_control = ThrottleActuator(
             throttle_range=throttle_range,
             throttle=throttle,
             clamp=clamp,

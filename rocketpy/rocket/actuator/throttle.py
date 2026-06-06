@@ -2,11 +2,11 @@ import warnings
 
 import numpy as np
 
-from ..prints.throttle_control_prints import _ThrottleControlPrints
+from rocketpy.prints.throttle_control_prints import _ThrottleControlPrints
 
 
-class ThrottleControl:
-    """Throttle Control system class for managing rocket throttle.
+class ThrottleActuator:
+    """Throttle actuator class as a controllable component.
 
     This class represents a throttle control system that allows the application
     of throttle around the rocket's engine. Ideal throttle is assumed.

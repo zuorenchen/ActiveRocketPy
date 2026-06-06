@@ -1,6 +1,6 @@
 import pytest
 
-from rocketpy.rocket.roll_control import RollControl
+from rocketpy.rocket.actuator.roll import RollControl
 from rocketpy.rocket.rocket import Rocket
 
 

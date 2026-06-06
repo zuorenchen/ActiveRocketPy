@@ -2,14 +2,14 @@ import warnings
 
 import numpy as np
 
-from ..prints.roll_control_prints import _RollControlPrints
+from rocketpy.prints.roll_control_prints import _RollControlPrints
 
 
-class RollControl:
-    """Roll Control system class for managing rocket roll torque.
+class RollActuator:
+    """Roll actuator class as a controllable component.
 
     This class represents a roll control system that allows the application
-    of roll torque around the rocket's X-axis. Ideal roll torque is assumed.
+    of roll torque around the rocket's Z-axis. Ideal roll torque is assumed.
 
     Attributes
     ----------
