@@ -1,189 +1,255 @@
-import warnings
+from rocketpy.prints.thrust_vector_actuator_prints import _ThrustVectorActuatorPrints
 
-import numpy as np
-
-from rocketpy.prints.tvc_prints import _TVCPrints
+from .actuator import Actuator
 
 
-class ThrustVectorActuator:
-    """Thrust vector acuatot class as a controllable component.
+class ThrustVectorActuator(Actuator):
+    """Thrust vector actuator class as a controllable component. Inherits from Actuator.
 
-    This class represents a thrust vector control system that allows deflection
-    of the thrust vector through gimbal angles. TVC is typically controlled
-    by a controller function similar to air brakes and is used by ``Flight``
-    to model thrust vectoring behavior.
+    This class represents a thrust vector actuator that deflects the direction
+    of the thrust vector through gimbal angle.
+    This actuator is typically controlled by a controller function similar to air brakes
+    and is used by ``Flight`` to model thrust vector control (TVC).
 
     Attributes
     ----------
-    TVC.gimbal_angle_x : float
-        Current gimbal angle around the x-axis (pitch), in degrees.
-        Positive values provides positive M1 (pitch moment).
-    TVC.gimbal_angle_y : float
-        Current gimbal angle around the y-axis (yaw), in degrees.
-        Positive values provides positive M2 (yaw moment).
-    TVC.gimbal_range : float
-        Maximum gimbal angle magnitude in degrees. Both x and y gimbal angles
-        are clamped to this value if clamp is True.
-    TVC.clamp : bool, optional
-        If True, gimbal angles are clamped to [-gimbal_range, gimbal_range].
-        If False, a warning is issued when gimbal angles exceed the max value.
-    TVC.name : str
-        Name of the TVC system.
+    ThrustVectorActuator.name : str
+        Name of the thrust vector actuator.
+    ThrustVectorActuator.demand_rate : float
+        Demand rate of the thrust vector actuator in Hz. None indicates a continuous-time actuator.
+    ThrustVectorActuator.actuator_range : float
+        Range of the thrust vector actuator in deg.
+    ThrustVectorActuator.actuator_rate_limit : float
+        Rate limit of the thrust vector actuator in deg/sec. The thrust vector change is limited to this rate.
+    ThrustVectorActuator.clamp : bool, optional
+        If True, thrust gimbal angle is clamped to actuator_range.
+        If False, a warning is issued when thrust vector exceeds the range.
+    ThrustVectorActuator.actuator_time_constant : float
+        Time constant for the thrust vector actuator dynamics (first-order IIR filter) in seconds.
+    ThrustVectorActuator.actuator_initial_output : float
+        Initial thrust vector gimbal angle in deg.
+    ThrustVectorActuator._actuator_output : float
+        Current thrust vector gimbal angle in deg.
+
     """
 
     def __init__(
         self,
-        sampling_rate=100,
-        gimbal_range=0,
-        gimbal_rate_limit=0,
+        name="Thrust Vector Control",
+        demand_rate=100,
+        max_gimbal_angle=10,
+        gimbal_rate_limit=None,
         clamp=True,
-        gimbal_angle_x=0.0,
-        gimbal_angle_y=0.0,
-        actuator_tau_x=None,
-        actuator_tau_y=None,
-        name="TVC",
+        initial_gimbal_angle=0.0,
+        gimbal_time_constant=None,
     ):
-        """Initializes the TVC class.
+        """Initializes the thrust vector actuator class.
 
         Parameters
         ----------
-        sampling_rate : int, optional
-            Sampling rate of the TVC controller in Hz. Default is 100 Hz.
-        gimbal_range : int, float
-            Maximum gimbal angle magnitude in degrees. Both x and y gimbal
-            angles are clamped to this value if clamp is True. Must be
-            non-negative. Default is 0 (no deflection).
-        gimbal_rate_limit : int, float, optional
-            Maximum gimbal rate in degrees per second. Both x and y gimbal
-            rates are limited to this value. Must be non-negative.
-            Default is 0 (no movement).
-        clamp : bool, optional
-            If True, the simulation will clamp gimbal angles to the range
-            [-gimbal_range, gimbal_range] if they exceed this range.
-            If False, the simulation will issue a warning if gimbal angles
-            exceed the maximum value. Default is True.
-        gimbal_angle_x : float, optional
-            Initial gimbal angle around the x-axis (pitch) in degrees.
-            Default is 0.0 (no deflection).
-        gimbal_angle_y : float, optional
-            Initial gimbal angle around the y-axis (yaw) in degrees.
-            Default is 0.0 (no deflection).
-        actuator_tau_x : float, optional
-            Time constant for the x-axis actuator dynamics (first-order IIR
-            filter) in seconds. If None, no actuator dynamics are applied.
-            Must be non-negative. Default is None.
-        actuator_tau_y : float, optional
-            Time constant for the y-axis actuator dynamics (first-order IIR
-            filter) in seconds. If None, no actuator dynamics are applied.
-            Must be non-negative. Default is None.
         name : str, optional
-            Name of the TVC system. Default is "TVC".
+            Name of the thrust vector actuator. Default is "Thrust Vector Control".
+        demand_rate : int, optional
+            Demand rate of the thrust vector actuator in Hz. Default is 100 Hz.
+            None indicates a continuous-time actuator.
+        max_gimbal_angle : float, int
+            Maximum gimbal angle in deg. Must be non-negative.
+            Default is 10 deg.
+        gimbal_rate_limit : float, int
+            Maximum gimbal rate in deg/sec. Must be non-negative.
+            Default is None (no limit). demand_rate must be specified if gimbal_rate_limit is not None.
+        clamp : bool, optional
+            If True, the simulation will clamp gimbal angle to the range
+            [-max_gimbal_angle, max_gimbal_angle] if it exceeds this range.
+            If False, the simulation will issue a warning if gimbal angle
+            exceeds the maximum value. Default is True.
+        initial_gimbal_angle : float, optional
+            Initial gimbal angle in deg. Default is 0.0 (no gimbal).
+        roll_torque_time_constant : float, optional
+            Time constant for the roll torque actuator dynamics (first-order IIR
+            filter) in seconds. If None, no actuator dynamics are applied.
+            Must be non-negative. Default is None. demand_rate must be specified if roll_torque_time_constant is not None.
+
 
         Returns
         -------
         None
         """
-        self.name = name
-        self.sampling_rate = sampling_rate
-        assert gimbal_range >= 0, "gimbal_range must be non-negative."
-        self.gimbal_range = gimbal_range
-        assert gimbal_rate_limit >= 0, "gimbal_rate_limit must be non-negative."
-        self.gimbal_rate_limit = gimbal_rate_limit
-        self.clamp = clamp
-        # Actuator dynamics parameters
-        if actuator_tau_x is not None:
-            assert actuator_tau_x >= 0, "actuator_tau_x must be non-negative."
-        if actuator_tau_y is not None:
-            assert actuator_tau_y >= 0, "actuator_tau_y must be non-negative."
-        self.actuator_tau_x = actuator_tau_x
-        self.actuator_tau_y = actuator_tau_y
-        # Compute IIR filter coefficients (first-order system)
-        self._update_iir_coefficients()
-        self.initial_gimbal_angle_x = gimbal_angle_x
-        self.initial_gimbal_angle_y = gimbal_angle_y
-        self.gimbal_angle_x_prev = gimbal_angle_x
-        self.gimbal_angle_y_prev = gimbal_angle_y
-        self.gimbal_angle_x_filtered = gimbal_angle_x
-        self.gimbal_angle_y_filtered = gimbal_angle_y
-        self.gimbal_angle_x = gimbal_angle_x
-        self.gimbal_angle_y = gimbal_angle_y
-        self.prints = _TVCPrints(self)
 
-    def _update_iir_coefficients(self):
-        """Updates the IIR filter coefficients based on time constants and
-        sampling rate. Uses first-order discrete-time system:
-        y[n] = alpha * u[n] + (1 - alpha) * y[n-1]
-        where alpha = Ts / (tau + Ts)
+        super().__init__(
+            name=name,
+            demand_rate=demand_rate,
+            actuator_range=(-max_gimbal_angle, max_gimbal_angle),
+            actuator_rate_limit=gimbal_rate_limit,
+            clamp=clamp,
+            actuator_initial_output=initial_gimbal_angle,
+            actuator_time_constant=gimbal_time_constant,
+        )
+        self.prints = _ThrustVectorActuatorPrints(self)
+
+    @property
+    def gimbal_angle(self):
+        """Returns the current gimbal angle in deg."""
+        return self._actuator_output
+
+    @gimbal_angle.setter
+    def gimbal_angle(self, value):
+        """Sets the gimbal angle in deg."""
+        self._actuator_output = value
+
+    def info(self):
+        """Prints summarized information of the thrust vector actuator.
+
+        Returns
+        -------
+        None
         """
-        sampling_period = 1.0 / self.sampling_rate
-        # X-axis coefficients
-        if self.actuator_tau_x is not None and self.actuator_tau_x > 0:
-            self._alpha_x = sampling_period / (self.actuator_tau_x + sampling_period)
-        else:
-            self._alpha_x = 1.0  # No filtering, direct pass-through
-        # Y-axis coefficients
-        if self.actuator_tau_y is not None and self.actuator_tau_y > 0:
-            self._alpha_y = sampling_period / (self.actuator_tau_y + sampling_period)
-        else:
-            self._alpha_y = 1.0  # No filtering, direct pass-through
+        self.prints.basics()
+
+    def all_info(self):
+        """Prints all information of the thrust vector actuator.
+
+        Returns
+        -------
+        None
+        """
+        self.info()
+
+    def to_dict(self, **kwargs):  # pylint: disable=unused-argument
+        return {
+            "name": self.name,
+            "demand_rate": self.demand_rate,
+            "max_gimbal_angle": self.actuator_range[1],
+            "gimbal_rate_limit": self.actuator_rate_limit,
+            "clamp": self.clamp,
+            "initial_gimbal_angle": self.actuator_initial_output,
+            "gimbal_time_constant": self.actuator_time_constant,
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(
+            name=data.get("name"),
+            demand_rate=data.get("demand_rate"),
+            max_gimbal_angle=data.get("max_gimbal_angle"),
+            gimbal_rate_limit=data.get("gimbal_rate_limit"),
+            clamp=data.get("clamp"),
+            initial_gimbal_angle=data.get("initial_gimbal_angle"),
+            gimbal_time_constant=data.get("gimbal_time_constant"),
+        )
+
+
+class ThrustVectorActuator2D:
+    """Dual-axis thrust vector actuator class as a controllable component.
+
+    This class represents dual-axis thrust vector actuator that deflects the direction
+    of the thrust vector through dual-axis gimbal angles.
+    This actuator is typically controlled by a controller function similar to air brakes
+    and is used by ``Flight`` to model thrust vector control (TVC).
+
+    Attributes
+    ----------
+    ThrustVectorActuator2D.name : str
+        Name of the dual-axis thrust vector actuator.
+    ThrustVectorActuator2D.demand_rate : float
+        Demand rate of the dual-axis thrust vector actuator in Hz. None indicates a continuous-time actuator.
+    ThrustVectorActuator2D.actuator_range : float
+        Range of the dual-axis thrust vector actuator in deg.
+    ThrustVectorActuator2D.actuator_rate_limit : float
+        Rate limit of the dual-axis thrust vector actuator in deg/sec. The thrust vector change is limited to this rate.
+    ThrustVectorActuator2D.clamp : bool, optional
+        If True, thrust vector gimbal angles are clamped to actuator_range.
+        If False, a warning is issued when thrust vector exceeds the max value.
+    ThrustVectorActuator2D.actuator_time_constant : float
+        Time constant for the thrust vector actuator dynamics (first-order IIR filter) in seconds.
+    ThrustVectorActuator2D.actuator_initial_output : float
+        Initial thrust  gimbal angles in deg.
+    ThrustVectorActuator2D._actuator_output : float
+        Current thrust vector gimble angles in deg.
+
+    """
+
+    def __init__(
+        self,
+        name="Thrust Vector Control",
+        demand_rate=100,
+        max_gimbal_angle=10,
+        gimbal_rate_limit=None,
+        clamp=True,
+        initial_gimbal_angle=0.0,
+        gimbal_time_constant=None,
+    ):
+        """Initializes the dual-axis thrust vector actuator class.
+
+        Parameters
+        ----------
+        name : str, optional
+            Name of the dual-axis thrust vector actuator. Default is "Thrust Vector Control".
+        demand_rate : int, optional
+            Demand rate of the dual-axis thrust vector actuator in Hz. Default is 100 Hz.
+            None indicates a continuous-time actuator.
+        max_gimbal_angle : float, int
+            Maximum gimbal angle in deg. Must be non-negative.
+            Default is 10 deg.
+        gimbal_rate_limit : float, int
+            Maximum gimbal rate in deg/sec. Must be non-negative.
+            Default is None (no limit). demand_rate must be specified if gimbal_rate_limit is not None.
+        clamp : bool, optional
+            If True, the simulation will clamp gimbal angles to the range
+            [-max_gimbal_angle, max_gimbal_angle] if it exceeds this range.
+            If False, the simulation will issue a warning if gimbal angle
+            exceeds the maximum value. Default is True.
+        initial_gimbal_angle : float, optional
+            Initial gimbal angle in deg. Default is 0.0 (no gimbal).
+        roll_torque_time_constant : float, optional
+            Time constant for the roll torque actuator dynamics (first-order IIR
+            filter) in seconds. If None, no actuator dynamics are applied.
+            Must be non-negative. Default is None. demand_rate must be specified if roll_torque_time_constant is not None.
+
+
+        Returns
+        -------
+        None
+        """
+
+        self.x = ThrustVectorActuator(
+            name=name + " X-axis",
+            demand_rate=demand_rate,
+            max_gimbal_angle=max_gimbal_angle,
+            gimbal_rate_limit=gimbal_rate_limit,
+            clamp=clamp,
+            initial_gimbal_angle=initial_gimbal_angle,
+            gimbal_time_constant=gimbal_time_constant,
+        )
+        self.y = ThrustVectorActuator(
+            name=name + " Y-axis",
+            demand_rate=demand_rate,
+            max_gimbal_angle=max_gimbal_angle,
+            gimbal_rate_limit=gimbal_rate_limit,
+            clamp=clamp,
+            initial_gimbal_angle=initial_gimbal_angle,
+            gimbal_time_constant=gimbal_time_constant,
+        )
 
     @property
     def gimbal_angle_x(self):
-        """Returns the current gimbal angle around the x-axis (pitch)."""
-        return self._gimbal_angle_x
+        """Returns the current gimbal angle around the y-axis (yaw)."""
+        return self.x.gimbal_angle
 
     @gimbal_angle_x.setter
     def gimbal_angle_x(self, value):
-        # Check if deployment level is within bounds and warn user if not
-        if abs(value) > self.gimbal_range:
-            if self.clamp:
-                value = np.clip(value, -self.gimbal_range, self.gimbal_range)
-            else:
-                warnings.warn(
-                    f"Gimbal angle x of {self.name} is {value:.4f} deg, "
-                    f"which exceeds the maximum of {self.gimbal_range:.4f} deg.",
-                    UserWarning,
-                )
-        # Limit the gimbal rate
-        max_angle_change = self.gimbal_rate_limit / self.sampling_rate
-        angle_change = value - self.gimbal_angle_x_prev
-        if abs(angle_change) > max_angle_change:
-            value = self.gimbal_angle_x_prev + np.sign(angle_change) * max_angle_change
-        self.gimbal_angle_x_prev = value
-        # Apply first-order IIR actuator dynamics
-        self.gimbal_angle_x_filtered = (
-            self._alpha_x * value + (1 - self._alpha_x) * self.gimbal_angle_x_filtered
-        )
-        self._gimbal_angle_x = self.gimbal_angle_x_filtered
+        """Sets the gimbal angle in deg."""
+        self.x.gimbal_angle = value
 
     @property
     def gimbal_angle_y(self):
         """Returns the current gimbal angle around the y-axis (yaw)."""
-        return self._gimbal_angle_y
+        return self.y.gimbal_angle
 
     @gimbal_angle_y.setter
     def gimbal_angle_y(self, value):
-        # Check if deployment level is within bounds and warn user if not
-        if abs(value) > self.gimbal_range:
-            if self.clamp:
-                value = np.clip(value, -self.gimbal_range, self.gimbal_range)
-            else:
-                warnings.warn(
-                    f"Gimbal angle y of {self.name} is {value:.4f} deg, "
-                    f"which exceeds the maximum of {self.gimbal_range:.4f} deg.",
-                    UserWarning,
-                )
-        # Limit the gimbal rate
-        max_angle_change = self.gimbal_rate_limit / self.sampling_rate
-        angle_change = value - self.gimbal_angle_y_prev
-        if abs(angle_change) > max_angle_change:
-            value = self.gimbal_angle_y_prev + np.sign(angle_change) * max_angle_change
-        self.gimbal_angle_y_prev = value
-        # Apply first-order IIR actuator dynamics
-        self.gimbal_angle_y_filtered = (
-            self._alpha_y * value + (1 - self._alpha_y) * self.gimbal_angle_y_filtered
-        )
-        self._gimbal_angle_y = self.gimbal_angle_y_filtered
+        """Sets the gimbal angle in deg."""
+        self.y.gimbal_angle = value
 
     @property
     def gimbal_angles(self):
@@ -201,59 +267,3 @@ class ThrustVectorActuator:
         """
         self.gimbal_angle_x = value[0]
         self.gimbal_angle_y = value[1]
-
-    def _reset(self):
-        """Resets the TVC system to its initial state. This method is called
-        at the beginning of each simulation to ensure the TVC system is in
-        the correct state."""
-        self.gimbal_angle_x_prev = self.initial_gimbal_angle_x
-        self.gimbal_angle_y_prev = self.initial_gimbal_angle_y
-        self.gimbal_angle_x_filtered = self.initial_gimbal_angle_x
-        self.gimbal_angle_y_filtered = self.initial_gimbal_angle_y
-        self.gimbal_angle_x = self.initial_gimbal_angle_x
-        self.gimbal_angle_y = self.initial_gimbal_angle_y
-
-    def info(self):
-        """Prints summarized information of the TVC system.
-
-        Returns
-        -------
-        None
-        """
-        self.prints.geometry()
-
-    def all_info(self):
-        """Prints all information of the TVC system.
-
-        Returns
-        -------
-        None
-        """
-        self.info()
-
-    def to_dict(self, **kwargs):  # pylint: disable=unused-argument
-        return {
-            "sampling_rate": self.sampling_rate,
-            "gimbal_range": self.gimbal_range,
-            "gimbal_rate_limit": self.gimbal_rate_limit,
-            "clamp": self.clamp,
-            "gimbal_angle_x": self.initial_gimbal_angle_x,
-            "gimbal_angle_y": self.initial_gimbal_angle_y,
-            "actuator_tau_x": self.actuator_tau_x,
-            "actuator_tau_y": self.actuator_tau_y,
-            "name": self.name,
-        }
-
-    @classmethod
-    def from_dict(cls, data):
-        return cls(
-            sampling_rate=data.get("sampling_rate"),
-            gimbal_range=data.get("gimbal_range"),
-            gimbal_rate_limit=data.get("gimbal_rate_limit"),
-            clamp=data.get("clamp"),
-            gimbal_angle_x=data.get("gimbal_angle_x"),
-            gimbal_angle_y=data.get("gimbal_angle_y"),
-            actuator_tau_x=data.get("actuator_tau_x"),
-            actuator_tau_y=data.get("actuator_tau_y"),
-            name=data.get("name"),
-        )

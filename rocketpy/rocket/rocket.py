@@ -12,6 +12,9 @@ from rocketpy.mathutils.vector_matrix import Matrix, Vector
 from rocketpy.motors.empty_motor import EmptyMotor
 from rocketpy.plots.rocket_plots import _RocketPlots
 from rocketpy.prints.rocket_prints import _RocketPrints
+from rocketpy.rocket.actuator.roll import RollActuator
+from rocketpy.rocket.actuator.throttle import ThrottleActuator
+from rocketpy.rocket.actuator.thrust_vector import ThrustVectorActuator
 from rocketpy.rocket.aero_surface import (
     AirBrakes,
     EllipticalFins,
@@ -25,9 +28,6 @@ from rocketpy.rocket.aero_surface.fins.free_form_fins import FreeFormFins
 from rocketpy.rocket.aero_surface.generic_surface import GenericSurface
 from rocketpy.rocket.components import Components
 from rocketpy.rocket.parachute import Parachute
-from rocketpy.rocket.actuator.roll import RollActuator
-from rocketpy.rocket.actuator.throttle import ThrottleActuator
-from rocketpy.rocket.actuator.thrust_vector import ThrustVectorActuator
 from rocketpy.tools import (
     deprecated,
     find_obj_from_hash,
