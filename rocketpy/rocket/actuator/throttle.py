@@ -17,22 +17,22 @@ class ThrottleActuator(Actuator):
 
     Attributes
     ----------
-    ThrottleActuator.name : str
+    name : str
         Name of the throttle actuator.
-    ThrottleActuator.demand_rate : float
+    demand_rate : float
         Demand rate of the throttle actuator in Hz. None indicates a continuous-time actuator.
-    ThrottleActuator.actuator_range : float
+    actuator_range : float
         Range of the throttle actuator.
-    ThrottleActuator.actuator_rate_limit : float
+    actuator_rate_limit : float
         Rate limit of the throttle actuator in 1/s. The throttle change is limited to this rate.
-    ThrottleActuator.clamp : bool, optional
+    clamp : bool, optional
         If True, throttle is clamped to actuator_range.
         If False, a warning is issued when throttle exceeds the range.
-    ThrottleActuator.actuator_time_constant : float
+    actuator_time_constant : float
         Time constant for the throttle actuator dynamics (first-order IIR filter) in seconds.
-    ThrottleActuator.actuator_initial_output : float
+    actuator_initial_output : float
         Initial throttle value.
-    ThrottleActuator.throttle : float
+    throttle : float
         Current throttle value. The throttle is the fraction of the maximum thrust produced by the engine
         ranging from 0 (no thrust) to 1 (full thrust).
     """
@@ -91,12 +91,12 @@ class ThrottleActuator(Actuator):
     @property
     def throttle(self):
         """Returns the current throttle value."""
-        return self._actuator_output
+        return self.actuator_output
 
     @throttle.setter
     def throttle(self, value):
         """Sets the throttle value."""
-        self._actuator_output = value
+        self.actuator_output = value
 
     def info(self):
         """Prints summarized information of the throttle control system.

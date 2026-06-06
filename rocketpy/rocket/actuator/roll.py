@@ -14,22 +14,22 @@ class RollActuator(Actuator):
 
     Attributes
     ----------
-    RollActuator.name : str
+    name : str
         Name of the roll actuator.
-    RollActuator.demand_rate : float
+    demand_rate : float
         Demand rate of the roll control in Hz. None indicates a continuous-time actuator.
-    RollActuator.actuator_range : float
+    actuator_range : float
         Range of the roll control in N·m.
-    RollActuator.actuator_rate_limit : float
+    actuator_rate_limit : float
         Rate limit of the roll control in N·m/s. The roll torque change is limited to this rate.
-    RollActuator.clamp : bool, optional
+    clamp : bool, optional
         If True, roll torque is clamped to actuator_range.
         If False, a warning is issued when roll torque exceeds the range.
-    RollActuator.actuator_time_constant : float
+    actuator_time_constant : float
         Time constant for the roll torque actuator dynamics (first-order IIR filter) in seconds.
-    RollActuator.actuator_initial_output : float
+    actuator_initial_output : float
         Initial roll torque in N·m.
-    RollActuator.roll_torque : float
+    roll_torque : float
         Current roll torque output magnitude in N·m (Newton-meters).
         Positive values indicate counter-clockwise rotation when viewed
         from the nose of the rocket.
@@ -90,12 +90,12 @@ class RollActuator(Actuator):
     @property
     def roll_torque(self):
         """Returns the current roll torque in N·m."""
-        return self._actuator_output
+        return self.actuator_output
 
     @roll_torque.setter
     def roll_torque(self, value):
         """Sets the roll torque in N·m."""
-        self._actuator_output = value
+        self.actuator_output = value
 
     def info(self):
         """Prints summarized information of the roll control system.

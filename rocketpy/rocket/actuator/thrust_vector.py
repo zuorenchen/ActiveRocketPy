@@ -13,22 +13,22 @@ class ThrustVectorActuator(Actuator):
 
     Attributes
     ----------
-    ThrustVectorActuator.name : str
+    name : str
         Name of the thrust vector actuator.
-    ThrustVectorActuator.demand_rate : float
+    demand_rate : float
         Demand rate of the thrust vector actuator in Hz. None indicates a continuous-time actuator.
-    ThrustVectorActuator.actuator_range : float
+    actuator_range : float
         Range of the thrust vector actuator in deg.
-    ThrustVectorActuator.actuator_rate_limit : float
+    actuator_rate_limit : float
         Rate limit of the thrust vector actuator in deg/sec. The thrust vector change is limited to this rate.
-    ThrustVectorActuator.clamp : bool, optional
+    clamp : bool, optional
         If True, thrust gimbal angle is clamped to actuator_range.
         If False, a warning is issued when thrust vector exceeds the range.
-    ThrustVectorActuator.actuator_time_constant : float
+    actuator_time_constant : float
         Time constant for the thrust vector actuator dynamics (first-order IIR filter) in seconds.
-    ThrustVectorActuator.actuator_initial_output : float
+    actuator_initial_output : float
         Initial thrust vector gimbal angle in deg.
-    ThrustVectorActuator._actuator_output : float
+    gimbal_angle : float
         Current thrust vector gimbal angle in deg.
 
     """
@@ -90,12 +90,12 @@ class ThrustVectorActuator(Actuator):
     @property
     def gimbal_angle(self):
         """Returns the current gimbal angle in deg."""
-        return self._actuator_output
+        return self.actuator_output
 
     @gimbal_angle.setter
     def gimbal_angle(self, value):
         """Sets the gimbal angle in deg."""
-        self._actuator_output = value
+        self.actuator_output = value
 
     def info(self):
         """Prints summarized information of the thrust vector actuator.
@@ -164,7 +164,7 @@ class ThrustVectorActuator2D:
         Time constant for the thrust vector actuator dynamics (first-order IIR filter) in seconds.
     ThrustVectorActuator2D.actuator_initial_output : float
         Initial thrust  gimbal angles in deg.
-    ThrustVectorActuator2D._actuator_output : float
+    ThrustVectorActuator2D.actuator_output : float
         Current thrust vector gimble angles in deg.
 
     """
