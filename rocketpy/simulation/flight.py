@@ -1746,23 +1746,17 @@ class Flight:
         """Initialize controllers and sensors"""
         self._controllers = self.rocket._controllers[:]
         self.sensors = self.rocket.sensors.get_components()
-        if self._controllers or self.sensors:
-            if self.time_overshoot:  # pragma: no cover
-                self.time_overshoot = False
-                warnings.warn(
-                    "time_overshoot has been set to False due to the presence "
-                    "of controllers or sensors. "
-                )
-            # reset controllable objects to initial state (air brakes, thrust vector control, throttle control, and roll control)
-            for air_brakes in self.rocket.air_brakes:
-                air_brakes._reset()
-            if hasattr(self.rocket, "thrust_vector_control"):
-                self.rocket.thrust_vector_control.x._reset()
-                self.rocket.thrust_vector_control.y._reset()
-            if hasattr(self.rocket, "roll_control"):
-                self.rocket.roll_control._reset()
-            if hasattr(self.rocket, "throttle_control"):
-                self.rocket.throttle_control._reset()
+
+        # reset controllable objects to initial state (air brakes, thrust vector control, throttle control, and roll control)
+        for air_brakes in self.rocket.air_brakes:
+            air_brakes._reset()
+        if hasattr(self.rocket, "thrust_vector_control"):
+            self.rocket.thrust_vector_control.x._reset()
+            self.rocket.thrust_vector_control.y._reset()
+        if hasattr(self.rocket, "roll_control"):
+            self.rocket.roll_control._reset()
+        if hasattr(self.rocket, "throttle_control"):
+            self.rocket.throttle_control._reset()
         self.sensor_data = {}
         for sensor in self.sensors:
             sensor._reset(self.rocket)  # resets noise and measurement list
