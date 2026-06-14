@@ -179,7 +179,13 @@ class LinearGenericSurface(GenericSurface):
             # helper to build a 7‑input callable returning a fixed value
             def _constant_factory(value):
                 def _constant(
-                    alpha, beta, mach, reynolds, pitch_rate, yaw_rate, roll_rate
+                    alpha,  # pylint: disable=unused-argument
+                    beta,  # pylint: disable=unused-argument
+                    mach,  # pylint: disable=unused-argument
+                    reynolds,  # pylint: disable=unused-argument
+                    pitch_rate,  # pylint: disable=unused-argument
+                    yaw_rate,  # pylint: disable=unused-argument
+                    roll_rate,  # pylint: disable=unused-argument
                 ):
                     """Return the captured constant regardless of inputs."""
                     return value
