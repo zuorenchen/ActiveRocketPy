@@ -1,8 +1,4 @@
-import math
-
 import numpy as np
-
-from rocketpy.tools import inverted_haversine
 
 from ..mathutils.vector_matrix import Matrix, Vector
 from ..prints.sensors_prints import _GnssReceiverPrints
