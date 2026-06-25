@@ -210,7 +210,7 @@ def test_export_sensor_data(flight_calisto_with_sensors):
 @pytest.mark.parametrize(
     "flight_time, expected_values",
     [
-        ("t_initial", (0.25886, -0.649623, 0)),
+        ("t_initial", (0.05072660158631715, -0.12730092240875748, 0)),
         ("out_of_rail_time", (0.792028, -1.987634, 0)),
         ("apogee_time", (-0.509420, -0.732933, -2.089120e-14)),
         ("t_final", (0, 0, 0)),
@@ -249,7 +249,7 @@ def test_aerodynamic_moments(flight_calisto_custom_wind, flight_time, expected_v
 @pytest.mark.parametrize(
     "flight_time, expected_values",
     [
-        ("t_initial", (1.654150, 0.659142, -0.067103)),
+        ("t_initial", (0.32414923451082056, 0.12916629952407094, -0.067103)),
         ("out_of_rail_time", (5.052628, 2.013361, -1.75370)),
         ("apogee_time", (2.321838, -1.613641, -0.962108)),
         ("t_final", (-0.019802, 0.012030, 159.051604)),

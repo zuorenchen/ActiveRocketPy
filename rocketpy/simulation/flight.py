@@ -1746,22 +1746,17 @@ class Flight:
         """Initialize controllers and sensors"""
         self._controllers = self.rocket._controllers[:]
         self.sensors = self.rocket.sensors.get_components()
-        if self._controllers or self.sensors:
-            if self.time_overshoot:  # pragma: no cover
-                self.time_overshoot = False
-                warnings.warn(
-                    "time_overshoot has been set to False due to the presence "
-                    "of controllers or sensors. "
-                )
-            # reset controllable objects to initial state (air brakes, TVC, throttle control, and roll control)
-            for air_brakes in self.rocket.air_brakes:
-                air_brakes._reset()
-            if hasattr(self.rocket, "tvc"):
-                self.rocket.tvc._reset()
-            if hasattr(self.rocket, "roll_control"):
-                self.rocket.roll_control._reset()
-            if hasattr(self.rocket, "throttle_control"):
-                self.rocket.throttle_control._reset()
+
+        # reset controllable objects to initial state (air brakes, thrust vector control, throttle control, and roll control)
+        for air_brakes in self.rocket.air_brakes:
+            air_brakes._reset()
+        if hasattr(self.rocket, "thrust_vector_control"):
+            self.rocket.thrust_vector_control.x._reset()
+            self.rocket.thrust_vector_control.y._reset()
+        if hasattr(self.rocket, "roll_control"):
+            self.rocket.roll_control._reset()
+        if hasattr(self.rocket, "throttle_control"):
+            self.rocket.throttle_control._reset()
         self.sensor_data = {}
         for sensor in self.sensors:
             sensor._reset(self.rocket)  # resets noise and measurement list
@@ -2052,23 +2047,33 @@ class Flight:
                 getattr(self.rocket, "throttle_control", None), "throttle", 1.0
             )
 
-            # TVC (Thrust Vector Control)
-            if hasattr(self.rocket, "tvc"):
+            # Thrust Vector Control (TVC)
+            if hasattr(self.rocket, "thrust_vector_control"):
                 # TVC Fz thrust: F = T * sqrt(1 - sin(gimbal_angle_x)**2 - sin(gimbal_angle_y)**2)
                 thrust3 = effective_thrust * np.sqrt(
                     1
-                    - np.sin(self.rocket.tvc.gimbal_angle_x * (np.pi / 180)) ** 2
-                    - np.sin(self.rocket.tvc.gimbal_angle_y * (np.pi / 180)) ** 2
+                    - np.sin(
+                        self.rocket.thrust_vector_control.gimbal_angle_x * (np.pi / 180)
+                    )
+                    ** 2
+                    - np.sin(
+                        self.rocket.thrust_vector_control.gimbal_angle_y * (np.pi / 180)
+                    )
+                    ** 2
                 )
                 tvc_lever = self.rocket.nozzle_to_cdm
                 # TVC Mx My moments: M = T * sin(x) * r
                 M1 += (
-                    np.sin(self.rocket.tvc.gimbal_angle_x * (np.pi / 180))
+                    np.sin(
+                        self.rocket.thrust_vector_control.gimbal_angle_x * (np.pi / 180)
+                    )
                     * effective_thrust
                     * tvc_lever
                 )
                 M2 += (
-                    np.sin(self.rocket.tvc.gimbal_angle_y * (np.pi / 180))
+                    np.sin(
+                        self.rocket.thrust_vector_control.gimbal_angle_y * (np.pi / 180)
+                    )
                     * effective_thrust
                     * tvc_lever
                 )
@@ -2372,7 +2377,7 @@ class Flight:
                     M1,
                     M2,
                     M3,
-                    effective_thrust,
+                    thrust3,
                 ]
             )
         return u_dot
@@ -2773,25 +2778,31 @@ class Flight:
             getattr(self.rocket, "throttle_control", None), "throttle", 1.0
         )
 
-        # TVC (Thrust Vector Control)
-        if hasattr(self.rocket, "tvc"):
+        # Thrust Vector Control (TVC)
+        if hasattr(self.rocket, "thrust_vector_control"):
             tvc_lever = self.rocket.nozzle_to_cdm
             # TVC Mx My moments: M = T * sin(x) * r
             M1 += (
-                np.sin(self.rocket.tvc.gimbal_angle_x * (np.pi / 180))
+                np.sin(self.rocket.thrust_vector_control.gimbal_angle_x * (np.pi / 180))
                 * effective_thrust
                 * tvc_lever
             )
             M2 += (
-                np.sin(self.rocket.tvc.gimbal_angle_y * (np.pi / 180))
+                np.sin(self.rocket.thrust_vector_control.gimbal_angle_y * (np.pi / 180))
                 * effective_thrust
                 * tvc_lever
             )
             # TVC Fz thrust: F = T * sqrt(1 - sin^2(x) - sin^2(y))
             thrust3 = effective_thrust * np.sqrt(
                 1
-                - np.sin(self.rocket.tvc.gimbal_angle_x * (np.pi / 180)) ** 2
-                - np.sin(self.rocket.tvc.gimbal_angle_y * (np.pi / 180)) ** 2
+                - np.sin(
+                    self.rocket.thrust_vector_control.gimbal_angle_x * (np.pi / 180)
+                )
+                ** 2
+                - np.sin(
+                    self.rocket.thrust_vector_control.gimbal_angle_y * (np.pi / 180)
+                )
+                ** 2
             )
         else:
             thrust3 = effective_thrust
@@ -2866,7 +2877,7 @@ class Flight:
 
         if post_processing:
             self.__post_processed_variables.append(
-                [t, *v_dot, *w_dot, R1, R2, R3, M1, M2, M3, effective_thrust]
+                [t, *v_dot, *w_dot, R1, R2, R3, M1, M2, M3, thrust3]
             )
 
         return u_dot

@@ -82,13 +82,19 @@ class TestIdealSensors:
     def test_gnss_receiver(self):
         """Test an ideal GnssReceiver."""
         gnss = self.flight.rocket.sensors[4].component
-        time, latitude, longitude, altitude = zip(*gnss.measured_data)
-        sim_latitude = self.flight.latitude(time)
-        sim_longitude = self.flight.longitude(time)
-        sim_altitude = self.flight.altitude(time)
-        assert np.allclose(np.array(latitude), sim_latitude, atol=1e-12)
-        assert np.allclose(np.array(longitude), sim_longitude, atol=1e-12)
-        assert np.allclose(np.array(altitude), sim_altitude, atol=1e-12)
+        time, x, y, z, vx, vy, vz = zip(*gnss.measured_data)
+        sim_x = self.flight.x(time)
+        sim_y = self.flight.y(time)
+        sim_z = self.flight.z(time)
+        sim_vx = self.flight.vx(time)
+        sim_vy = self.flight.vy(time)
+        sim_vz = self.flight.vz(time)
+        assert np.allclose(np.array(x), sim_x, atol=1e-12)
+        assert np.allclose(np.array(y), sim_y, atol=1e-12)
+        assert np.allclose(np.array(z), sim_z, atol=1e-12)
+        assert np.allclose(np.array(vx), sim_vx, atol=1e-12)
+        assert np.allclose(np.array(vy), sim_vy, atol=1e-12)
+        assert np.allclose(np.array(vz), sim_vz, atol=1e-12)
 
 
 @pytest.mark.parametrize("plane", ["xz", "yz"])
