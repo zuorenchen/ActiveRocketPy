@@ -93,7 +93,7 @@ class StochasticRocket(StochasticModel):
         can not be a randomized.
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         rocket,
         radius=None,

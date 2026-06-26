@@ -290,37 +290,42 @@ class MonteCarlo:
             n_simulations=self.number_of_simulations,
             start_time=time(),
         )
+        inputs_json = ""
         try:
             self.environment._set_stochastic(random_seed)
             self.rocket._set_stochastic(random_seed)
             self.flight._set_stochastic(random_seed)
             while sim_monitor.keep_simulating():
                 sim_monitor.increment()
-                inputs_json, outputs_json = "", ""
 
                 flight = self.__run_single_simulation()
                 inputs_json = self.__evaluate_flight_inputs(sim_monitor.count)
                 outputs_json = self.__evaluate_flight_outputs(flight, sim_monitor.count)
-
-                with open(self.input_file, "a", encoding="utf-8") as f:
-                    f.write(inputs_json)
-                with open(self.output_file, "a", encoding="utf-8") as f:
-                    f.write(outputs_json)
+                self.__append_serial_results(inputs_json, outputs_json)
 
                 sim_monitor.print_update_status()
 
             sim_monitor.print_final_status()
 
         except KeyboardInterrupt:
-            _SimMonitor.reprint("Keyboard Interrupt, files saved.")
-            with open(self._error_file, "a", encoding="utf-8") as f:
-                f.write(inputs_json)
+            self.__save_serial_error(inputs_json, "Keyboard Interrupt, files saved.")
 
         except Exception as error:
-            _SimMonitor.reprint(f"Error on iteration {sim_monitor.count}: {error}")
-            with open(self._error_file, "a", encoding="utf-8") as f:
-                f.write(inputs_json)
+            self.__save_serial_error(
+                inputs_json, f"Error on iteration {sim_monitor.count}: {error}"
+            )
             raise error
+
+    def __append_serial_results(self, inputs_json, outputs_json):
+        with open(self.input_file, "a", encoding="utf-8") as f:
+            f.write(inputs_json)
+        with open(self.output_file, "a", encoding="utf-8") as f:
+            f.write(outputs_json)
+
+    def __save_serial_error(self, inputs_json, message):
+        _SimMonitor.reprint(message)
+        with open(self._error_file, "a", encoding="utf-8") as f:
+            f.write(inputs_json)
 
     def __run_in_parallel(self, random_seed=None, n_workers=None):
         """

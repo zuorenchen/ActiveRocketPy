@@ -381,34 +381,15 @@ def test_noisy_barometer(noisy_barometer, example_plain_env):
 
 def test_noisy_gnss(noisy_gnss, example_plain_env):
     """Test the measure method of the GnssReceiver class. Checks if saved
-    measurement is (latitude, longitude, altitude) and if measured_data is [(t, (latitude, longitude, altitude)), ...]
+    measurement is (x, y, z, vx, vy, vz) and if measured_data is [(t, x, y, z, vx, vy, vz), ...]
     """
     # expected measurement without noise
     relative_position = Vector([0.4, 0.4, 1])
-    lat, lon = example_plain_env.latitude, example_plain_env.longitude
-    earth_radius = example_plain_env.earth_radius
     x, y, z = (Matrix.transformation(U[6:10]) @ relative_position) + Vector(U[0:3])
-    drift = (x**2 + y**2) ** 0.5
-    bearing = (2 * np.pi - np.arctan2(-x, y)) * (180 / np.pi)
-    latitude = np.degrees(
-        np.arcsin(
-            np.sin(np.radians(lat)) * np.cos(drift / earth_radius)
-            + np.cos(np.radians(lat))
-            * np.sin(drift / earth_radius)
-            * np.cos(np.radians(bearing))
-        )
-    )
-    longitude = np.degrees(
-        np.radians(lon)
-        + np.arctan2(
-            np.sin(np.radians(bearing))
-            * np.sin(drift / earth_radius)
-            * np.cos(np.radians(lat)),
-            np.cos(drift / earth_radius)
-            - np.sin(np.radians(lat)) * np.sin(np.radians(latitude)),
-        )
-    )
-    altitude = z
+    vx, vy, vz = (
+        Matrix.transformation(U[6:10])
+        @ Vector.cross(Vector(U[10:13]), relative_position)
+    ) + Vector(U[3:6])
 
     noisy_gnss.measure(
         time=TIME,
@@ -416,26 +397,10 @@ def test_noisy_gnss(noisy_gnss, example_plain_env):
         relative_position=relative_position,
         environment=example_plain_env,
     )
-    assert noisy_gnss.measurement == approx([latitude, longitude, altitude], abs=3.2)
-    assert len(noisy_gnss.measurement) == 3
-    assert noisy_gnss.measured_data[0][1:] == approx(
-        [latitude, longitude, altitude], abs=3.2
-    )
+    assert noisy_gnss.measurement == approx([x, y, z, vx, vy, vz], abs=3.0)
+    assert len(noisy_gnss.measurement) == 6
+    assert noisy_gnss.measured_data[0][1:] == approx([x, y, z, vx, vy, vz], abs=3.0)
     assert noisy_gnss.measured_data[0][0] == TIME
-
-    # check last measurement considering noise error bounds
-    noisy_gnss.measure(
-        time=TIME,
-        u=U,
-        relative_position=relative_position,
-        environment=example_plain_env,
-    )
-    assert noisy_gnss.measurement == approx([latitude, longitude, altitude], abs=3.2)
-    assert len(noisy_gnss.measurement) == 3
-    assert noisy_gnss.measured_data[1][1:] == approx(
-        [latitude, longitude, altitude], abs=3.2
-    )
-    assert noisy_gnss.measured_data[1][0] == TIME
 
 
 @pytest.mark.parametrize(
@@ -444,7 +409,7 @@ def test_noisy_gnss(noisy_gnss, example_plain_env):
         ("ideal_accelerometer", "csv", "t,ax,ay,az\n"),
         ("ideal_gyroscope", "csv", "t,wx,wy,wz\n"),
         ("ideal_barometer", "csv", "t,pressure\n"),
-        ("ideal_gnss", "csv", "t,latitude,longitude,altitude\n"),
+        ("ideal_gnss", "csv", "t,x,y,z,vx,vy,vz\n"),
     ],
 )
 def test_export_data_csv(
@@ -485,7 +450,7 @@ def test_export_data_csv(
         ("ideal_accelerometer", "json", ("ax", "ay", "az")),
         ("ideal_gyroscope", "json", ("wx", "wy", "wz")),
         ("ideal_barometer", "json", ("pressure",)),
-        ("ideal_gnss", "json", ("latitude", "longitude", "altitude")),
+        ("ideal_gnss", "json", ("x", "y", "z", "vx", "vy", "vz")),
     ],
 )
 def test_export_data_json(
