@@ -3,22 +3,18 @@
 ActiveRocketPy is the enhanced version of [RocketPy](https://github.com/RocketPy-Team/RocketPy), a powerful Python package for simulating the trajectories of high-power rockets. This fork introduces a range of active control and guidance, navigation, and control (GNC) features.
 
 ## Main features (ActiveRocketPy)
-1. **Thrust Vector Control (TVC)**
-   - Implementation of TVC control class
-   - Feed X & Y gimbal angles through a control function
-   - Actuator dynamics and limits for realistic TVC simulations (WIP)
 
-2. **Roll Control**
-   - Implementation of roll control class
-   - Feed ideal roll torque through a control function
-   - Actuator dynamics and limits for realistic roll control simulations (WIP)
+1. **Actuator Classes for active control**
+   - Actuator dynamics and limits for realistic active flight simulations
+   - **Thrust Vector Control (TVC)**
+      - Feed X & Y gimbal angles through a control function
+   - **Roll Control**
+      - Feed ideal roll torque through a control function
+   - **Throttle Control**
+      - Feed throttle percentage through a control function
+      - Known limitation: The mass properties are pre-calculated before flight according to max flow rate and burn time. Throttle commands does not affect the change of the mass properties in-flight. It is equivalent to throttling the Isp of rocket engine while the flow rate remains constant. The engine is cut off when burn time is reached
 
-3. **Throttle Control**
-   - Implementation of throttle control class
-   - Feed throttle percentage through a control function
-   - Actuator dynamics and limits for realistic throttle control simulations (WIP)
-
-4. **Step simulation**
+2. **Step simulation**
     - Step through the simulation one time step at a time
     - Update control inputs and step simulations in loop
 
@@ -76,7 +72,6 @@ Check out documentation details using the links below:
 - [RocketPy Technical Documentation](https://docs.rocketpy.org/en/latest/technical/index.html)
 - [RocketPy Flight Examples](https://docs.rocketpy.org/en/latest/examples/index.html)
 
-
 <br>
 
 # Getting Started
@@ -100,7 +95,6 @@ pip install -r requirements-tests.txt  # install test/dev requirements
 
 ActiveRocketPy is forked and maintained by [ZuoRen Chen](https://github.com/zuorenchen), along with the team from [Advanced Rocket Research Center (ARRC)](https://github.com/ARRC-Rocket).
 
-
 ## Citation
 
 If you run ActiveRocketPy in your research, please consider citing:
@@ -114,4 +108,5 @@ If you run ActiveRocketPy in your research, please consider citing:
   url = {https://github.com/ARRC-Rocket/ActiveRocketPy}
 }
 ```
+
 To cite RocketPy, please check its repository for the latest citation information: [RocketPy](https://github.com/RocketPy-Team/RocketPy)

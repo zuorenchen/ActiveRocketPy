@@ -626,7 +626,7 @@ def save_to_rpy(flight: Flight, filename: str, include_outputs=False):
     file = Path(filename).with_suffix(".rpy")
 
     with open(file, "w") as f:
-        data = {"date": str(date.today()), "version": version("rocketpy")}
+        data = {"date": str(date.today()), "version": version("activerocketpy")}
         data["simulation"] = flight
         json.dump(
             data,
@@ -650,7 +650,7 @@ def load_from_rpy(filename: str, resimulate=False):
 
     Returns
     -------
-    rocketpy.Flight
+    activerocketpy.Flight
         Flight object containing simulation information from the .rpy file
     """
     ext = os.path.splitext(os.path.basename(filename))[1]
@@ -660,12 +660,12 @@ def load_from_rpy(filename: str, resimulate=False):
     with open(filename, "r") as f:
         data = json.load(f)
         if packaging_version.parse(data["version"]) > packaging_version.parse(
-            version("rocketpy")
+            version("activerocketpy")
         ):
             warnings.warn(
                 "The file was saved in an updated version of",
-                f"RocketPy (v{data['version']}), the current",
-                f"imported module is v{version('rocketpy')}",
+                f"ActiveRocketPy (v{data['version']}), the current",
+                f"imported module is v{version('activerocketpy')}",
             )
         simulation = json.dumps(data["simulation"])
         flight = json.loads(simulation, cls=RocketPyDecoder, resimulate=resimulate)

@@ -169,7 +169,7 @@ class LinearGenericSurface(GenericSurface):
         # Populate the coefficients from the list of constants if they are not defined
         if coefficients is None:
             coefficients = self._get_default_coefficients()
-        if coefficient_constants is not None:
+        if coefficient_constants:
             assert len(coefficient_constants) == len(
                 self._get_default_coefficients()
             ), (
