@@ -1,7 +1,9 @@
 import csv
 import inspect
+import logging
 import math
 import warnings
+
 from typing import Iterable
 
 import numpy as np
@@ -38,6 +40,8 @@ from rocketpy.tools import (
     find_obj_from_hash,
     parallel_axis_theorem_from_com,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # pylint: disable=too-many-instance-attributes, too-many-public-methods, too-many-instance-attributes
@@ -499,7 +503,7 @@ class Rocket:
         """
         # Make sure there is a motor associated with the rocket
         if self.motor is None:
-            print("Please associate this rocket with a motor!")
+            logger.warning("Please associate this rocket with a motor!")
             return False
 
         self.total_mass = self.mass + self.motor.total_mass
@@ -519,7 +523,7 @@ class Rocket:
         """
         # Make sure there is a motor associated with the rocket
         if self.motor is None:
-            print("Please associate this rocket with a motor!")
+            logger.warning("Please associate this rocket with a motor!")
             return False
 
         self.dry_mass = self.mass + self.motor.dry_mass
@@ -602,7 +606,7 @@ class Rocket:
         # TODO: add tests for reduced_mass values
         # Make sure there is a motor associated with the rocket
         if self.motor is None:
-            print("Please associate this rocket with a motor!")
+            logger.warning("Please associate this rocket with a motor!")
             return False
 
         # Get nicknames
@@ -1077,9 +1081,9 @@ class Rocket:
         if hasattr(self, "motor"):
             # pylint: disable=access-member-before-definition
             if not isinstance(self.motor, EmptyMotor):
-                print(
+                logger.warning(
                     "Only one motor per rocket is currently supported. "
-                    + "Overwriting previous motor."
+                    "Overwriting previous motor."
                 )
         self.motor = motor
         self.motor_position = position

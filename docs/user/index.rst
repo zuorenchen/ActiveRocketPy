@@ -47,4 +47,6 @@ RocketPy's User Guide
    :caption: Further Analysis
 
    Function <function.rst>
-   Utilities <analysis.rst>  Aerodynamic Surfaces <aerodynamics/surfaces.rst>
+   Utilities <analysis.rst>
+   Aerodynamic Surfaces <aerodynamics/surfaces.rst>
+   Logging <logging.rst>
