@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - name: Clone RocketPy
-        uses: actions/checkout@main
+        uses: actions/checkout@v4
         with:
           repository: RocketPy-Team/RocketPy
           ref: develop
@@ -27,31 +27,52 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
         run: |
-          SECTION="### Added"
-          PREFIX="ENH"
+          # The PR title is untrusted input, so it is read from the environment
+          # inside Python rather than interpolated into a shell/sed program.
+          # This avoids both shell injection and sed breaking on special
+          # characters (\, /, &, newlines) in the title.
+          python - <<'PY'
+          import os
 
-          if [[ "$PR_LABELS" == *"Bug"* ]]; then
-            SECTION="### Fixed"
-            PREFIX="BUG"
-          elif [[ "$PR_LABELS" == *"Refactor"* ]]; then
-            SECTION="### Changed"
-            PREFIX="MNT"
-          elif [[ "$PR_LABELS" == *"Docs"* ]] && [[ "$PR_LABELS" == *"Git housekeeping"* ]]; then
-            SECTION="### Changed"
-            PREFIX="DOC"
-          elif [[ "$PR_LABELS" == *"Tests"* ]]; then
-            SECTION="### Changed"
-            PREFIX="TST"
-          elif [[ "$PR_LABELS" == *"Docs"* ]]; then
-            # Only documentation -> Added section
-            SECTION="### Added"
-            PREFIX="DOC"
-          fi
+          labels = os.environ.get("PR_LABELS", "")
+          title = os.environ["PR_TITLE"]
+          number = os.environ["PR_NUMBER"]
 
-          ENTRY="- $PREFIX: $PR_TITLE [#$PR_NUMBER](https://github.com/RocketPy-Team/RocketPy/pull/$PR_NUMBER)"
-          SECTION_LINE=$(grep -n "^$SECTION$" CHANGELOG.md | head -1 | cut -d: -f1)
+          section, prefix = "### Added", "ENH"
+          if "Bug" in labels:
+              section, prefix = "### Fixed", "BUG"
+          elif "Refactor" in labels:
+              section, prefix = "### Changed", "MNT"
+          elif "Docs" in labels and "Git housekeeping" in labels:
+              section, prefix = "### Changed", "DOC"
+          elif "Tests" in labels:
+              section, prefix = "### Changed", "TST"
+          elif "Docs" in labels:
+              section, prefix = "### Added", "DOC"
 
-          sed -i "$((SECTION_LINE + 1))a\\$ENTRY" CHANGELOG.md
+          entry = (
+              f"- {prefix}: {title} "
+              f"[#{number}](https://github.com/RocketPy-Team/RocketPy/pull/{number})\n"
+          )
+
+          with open("CHANGELOG.md", encoding="utf-8") as handle:
+              lines = handle.readlines()
+
+          for index, line in enumerate(lines):
+              if line.rstrip("\n") == section:
+                  insert_at = index + 1
+                  # Place the entry at the top of the list, after the single
+                  # blank line that follows the section header.
+                  if insert_at < len(lines) and lines[insert_at].strip() == "":
+                      insert_at += 1
+                  lines.insert(insert_at, entry)
+                  break
+          else:
+              raise SystemExit(f"Section {section!r} not found in CHANGELOG.md")
+
+          with open("CHANGELOG.md", "w", encoding="utf-8") as handle:
+              handle.writelines(lines)
+          PY
 
       - name: Push Changes
         run: |
