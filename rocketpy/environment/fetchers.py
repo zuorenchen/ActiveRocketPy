@@ -228,7 +228,7 @@ def fetch_hrrr_file_return_dataset(max_attempts=10, base_delay=2):
             return netCDF4.Dataset(file_url)
         except OSError:
             attempt_count += 1
-            time.sleep(base_delay**attempt_count)
+            time.sleep(min(base_delay**attempt_count, MAX_RETRY_DELAY_SECONDS))
 
     raise RuntimeError(
         "Unable to load latest weather data for HRRR through " + file_url
@@ -265,7 +265,7 @@ def fetch_aigfs_file_return_dataset(max_attempts=10, base_delay=2):
             return netCDF4.Dataset(file_url)
         except OSError:
             attempt_count += 1
-            time.sleep(base_delay**attempt_count)
+            time.sleep(min(base_delay**attempt_count, MAX_RETRY_DELAY_SECONDS))
 
     raise RuntimeError(
         "Unable to load latest weather data for AIGFS through " + file_url

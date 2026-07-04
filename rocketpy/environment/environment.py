@@ -701,7 +701,6 @@ class Environment:
             "HRRR",
             "HIRESW",
             "GEFS",
-            "ERA5",
             "MERRA2",
         ]
         if isinstance(dictionary, str):
@@ -1166,9 +1165,15 @@ class Environment:
 
         # Auto-detect. Primary source: known-model lookup table.
         # Fallback: units attribute inside the file.
-        _hpa_dicts = {"ECMWF", "ECMWF_V0", "ERA5", "MERRA2"}
-        _pa_files = {"GFS", "NAM", "RAP", "HRRR", "AIGFS", "HIRESW", "GEFS"}
+        # THREDDS (UCAR) models expose pressure on the 'isobaric' coordinate in
+        # Pa; NOMADS-GrADS models (GEFS, HIRESW) expose it on the 'lev'
+        # coordinate in hPa/millibars and must be scaled by 100.
+        _hpa_dicts = {"ECMWF", "ECMWF_V0", "MERRA2"}
+        _hpa_files = {"GEFS", "HIRESW"}
+        _pa_files = {"GFS", "NAM", "RAP", "HRRR", "AIGFS"}
         if input_dict in _hpa_dicts or input_file in _hpa_dicts:
+            return 100
+        if input_file in _hpa_files:
             return 100
         if input_file in _pa_files:
             return 1
@@ -1219,7 +1224,7 @@ class Environment:
             - ``"windy"``: ignored.
             - ``"forecast"``, ``"reanalysis"`` and ``"ensemble"``: local
               dictionary, or one of the built-in mappings (e.g. ``"ECMWF"``,
-              ``"GFS"``, ``"ERA5"``, ``"RAP"``, ``"HRRR"``, etc.) corresponding
+              ``"GFS"``, ``"MERRA2"``, ``"RAP"``, ``"HRRR"``, etc.) corresponding
               to the file structure.
         pressure : float, string, array, callable, optional
             This defines the atmospheric pressure profile. Should be given if

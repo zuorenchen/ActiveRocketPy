@@ -316,7 +316,9 @@ Here is just a quick taste of what RocketPy is able to calculate. There are hund
 If you want to see the trajectory on Google Earth, RocketPy acn easily export a KML file for you:
 
 ```python
-test_flight.export_kml(file_name="test_flight.kml")
+from rocketpy.simulation import FlightDataExporter
+
+FlightDataExporter(test_flight).export_kml(file_name="test_flight.kml")
 ```
 
 <img alt="6-DOF Trajectory Plot" src="https://raw.githubusercontent.com/RocketPy-Team/RocketPy/master/docs/static/trajectory-earth.png" width="501">

@@ -2,7 +2,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-from ..mathutils.function import Function
+from ..mathutils.function import Function, funcify_method
+from ..tools import parallel_axis_theorem_from_com
 from .motor import Motor
 
 
@@ -71,8 +72,16 @@ class RingClusterMotor(Motor):
             dry_inertia=dry_inertia_cluster,
             center_of_dry_mass_position=motor.center_of_dry_mass_position,
             coordinate_system_orientation=motor.coordinate_system_orientation,
+            reference_pressure=motor.reference_pressure,
             interpolation_method="linear",
         )
+
+        # The cluster has ``number`` nozzles, so its total exit area (used for
+        # the pressure-thrust / vacuum-thrust correction, which must be
+        # consistent with the thrust that was scaled by ``number``) is
+        # ``number`` times a single nozzle's area. ``nozzle_radius`` is kept as
+        # the single-nozzle radius.
+        self.nozzle_area = np.pi * motor.nozzle_radius**2 * number
 
         self._setup_grain_properties()
         self._propellant_mass = self.motor.propellant_mass * self.number
@@ -101,6 +110,67 @@ class RingClusterMotor(Motor):
         self._propellant_I_12 = zero_func
         self._propellant_I_13 = zero_func
         self._propellant_I_23 = zero_func
+
+    @funcify_method("Time (s)", "Inertia I_22 (kg m²)")
+    def I_22(self):
+        """Assembled (dry + propellant) transverse inertia about the e_2 axis.
+
+        Overrides :meth:`Motor.I_22`, which returns ``I_11`` directly on the
+        assumption that the motor is axisymmetric. That assumption does not hold
+        for every ring cluster, so ``I_22`` is computed here from the
+        separately-evaluated ``_22`` components (see
+        :meth:`_evaluate_propellant_inertia` and :meth:`_calculate_dry_inertia`).
+
+        When ``I_22`` equals ``I_11``
+        -----------------------------
+        The relevant property is not continuous axisymmetry (which a discrete
+        cluster of ``number`` motors never has for finite ``number``) but
+        *transverse isotropy* of the inertia tensor: ``I_11 == I_22`` and
+        ``I_12 == 0``, i.e. every transverse axis is a principal axis with the
+        same moment. A rigid body has this whenever it possesses a discrete
+        rotational-symmetry axis of order ``n >= 3`` -- geometric axisymmetry is
+        sufficient but not necessary.
+
+        For a ring cluster the motors sit at angles ``theta_k = 2*pi*k/number``,
+        ``k = 0 .. number-1``, all at radius ``radius``. The transverse
+        anisotropy is driven by
+
+            I_22 - I_11  proportional to  sum_k (x_k**2 - y_k**2)
+                         = radius**2 * sum_k cos(2*theta_k)
+                         = radius**2 * Re( sum_k exp(i * 4*pi*k / number) ).
+
+        That geometric series vanishes unless ``exp(i*4*pi/number) == 1``, i.e.
+        unless ``number`` divides 2. Hence:
+
+        * ``number == 2`` -- the ``m = 2`` angular term does not cancel
+          (``sum cos(2*theta_k) == 2``); the cluster is transversely anisotropic
+          and ``I_22 != I_11``. This is the case this override exists for.
+        * ``number >= 3`` -- the term cancels exactly for *every* such value
+          (odd, even, prime alike); ``I_22 == I_11`` analytically, and this
+          method returns the same value as :meth:`I_11` up to floating-point
+          round-off.
+
+        Note that parity or primality of ``number`` is irrelevant: three or more
+        equally-spaced motors already annihilate the ``m = 2`` harmonic, so e.g.
+        ``number == 3`` and ``number == 5`` are both transversely isotropic. The
+        sole non-trivial anisotropic configuration (given the ``number >= 2``
+        constraint enforced in ``__init__``) is ``number == 2``.
+
+        The implementation nonetheless sums every motor's contribution
+        explicitly rather than special-casing ``number == 2``, so the result is
+        exact for all configurations.
+        """
+        prop_I_22 = parallel_axis_theorem_from_com(
+            self.propellant_I_22,
+            self.propellant_mass,
+            self.center_of_propellant_mass - self.center_of_mass,
+        )
+        dry_I_22 = parallel_axis_theorem_from_com(
+            self.dry_I_22,
+            self.dry_mass,
+            self.center_of_dry_mass_position - self.center_of_mass,
+        )
+        return prop_I_22 + dry_I_22
 
     def _setup_grain_properties(self):
         """Copies the grain properties from the base motor."""

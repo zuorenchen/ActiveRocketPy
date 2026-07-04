@@ -201,6 +201,20 @@ def test_spherical_tank_deprecated_radius_kwarg():
     assert tank.radius_function == r
 
 
+def test_cylindrical_tank_rejects_unknown_kwargs():
+    """The deprecated-radius **kwargs handling must not silently swallow other
+    (e.g. misspelled) keyword arguments."""
+    with pytest.raises(TypeError, match="unexpected keyword"):
+        CylindricalTank(radius_function=0.1, height=2.0, spherical_cap=True)
+
+
+def test_spherical_tank_rejects_unknown_kwargs():
+    """The deprecated-radius **kwargs handling must not silently swallow other
+    (e.g. misspelled) keyword arguments."""
+    with pytest.raises(TypeError, match="unexpected keyword"):
+        SphericalTank(radius_function=0.05, geometry_dicti={})
+
+
 def test_cylindrical_tank_to_dict_uses_radius_function_key():
     """Test that CylindricalTank.to_dict() uses the 'radius_function' key."""
     tank = CylindricalTank(0.1, 2.0)

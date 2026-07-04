@@ -679,3 +679,31 @@ def test_weather_model_mapping_get_is_case_insensitive():
     mapping = WeatherModelMapping()
     assert mapping.get("aigfs") == mapping.get("AIGFS")
     assert mapping.get("ecmwf_v0") == mapping.get("ECMWF_v0")
+
+
+@pytest.mark.parametrize(
+    "model, expected_factor",
+    [
+        # NOMADS-GrADS models expose pressure on the 'lev' coordinate in hPa
+        # and MUST be scaled by 100 (regression: they were forced to factor 1).
+        ("GEFS", 100),
+        ("HIRESW", 100),
+        # THREDDS (UCAR) models expose pressure on 'isobaric' already in Pa.
+        ("GFS", 1),
+        ("NAM", 1),
+        ("RAP", 1),
+        ("HRRR", 1),
+        ("AIGFS", 1),
+    ],
+)
+def test_pressure_conversion_factor_autodetect_by_model(
+    example_plain_env, model, expected_factor
+):
+    """Regression test for the GEFS/HIRESW pressure-unit bug: NOMADS-GrADS
+    models report pressure in hPa (factor 100), THREDDS models in Pa (factor 1).
+    A wrong factor silently corrupts the whole atmospheric profile (100x)."""
+    # pylint: disable=protected-access
+    factor = example_plain_env._Environment__determine_pressure_conversion_factor(
+        None, None, model
+    )
+    assert factor == expected_factor

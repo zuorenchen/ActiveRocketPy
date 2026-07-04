@@ -192,6 +192,27 @@ def test_estimate_confidence_interval_raises_type_error_for_invalid_statistic():
         mc.estimate_confidence_interval("apogee", statistic="not_a_function")
 
 
+@pytest.mark.parametrize(
+    "kwargs, match",
+    [
+        ({"batch_size": 0}, "batch_size"),
+        ({"batch_size": -5}, "batch_size"),
+        ({"max_simulations": 0}, "max_simulations"),
+        ({"tolerance": 0}, "tolerance"),
+        ({"tolerance": -1.0}, "tolerance"),
+        ({"target_confidence": 1.5}, "target_confidence"),
+        ({"target_confidence": 0}, "target_confidence"),
+    ],
+)
+def test_simulate_convergence_validates_inputs(kwargs, match):
+    """simulate_convergence must reject invalid inputs up front. In particular a
+    non-positive batch_size would otherwise make the loop run zero simulations
+    per iteration and spin forever."""
+    mc = MockMonteCarlo()
+    with pytest.raises(ValueError, match=match):
+        mc.simulate_convergence(**kwargs)
+
+
 # --- CSV and JSON export/import tests ---
 
 

@@ -1,5 +1,3 @@
-import logging
-
 from . import utils
 from .control import _Controller
 from .environment import Environment, EnvironmentAnalysis
@@ -72,5 +70,3 @@ from .stochastic import (
     StochasticTail,
     StochasticTrapezoidalFins,
 )
-
-logging.getLogger(__name__).addHandler(logging.NullHandler())

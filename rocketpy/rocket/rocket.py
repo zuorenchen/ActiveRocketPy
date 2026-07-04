@@ -2,6 +2,7 @@ import csv
 import inspect
 import logging
 import math
+import numbers
 import warnings
 from typing import Iterable
 from warnings import warn
@@ -321,20 +322,27 @@ class Rocket:
                     + '"tail_to_nose" and "nose_to_tail".'
                 )
 
-        # Validate inputs
-        if not isinstance(radius, (int, float)) or radius <= 0:
+        # Validate inputs. Accept Python and NumPy numeric scalars for
+        # radius/mass, and any length-3 or length-6 sequence (tuple, list or
+        # numpy array) for inertia, matching the permissive behavior of earlier
+        # versions (numpy inputs are common when computing inertia tensors).
+        if not isinstance(radius, numbers.Real) or radius <= 0:
             raise InvalidParameterError(
                 f"Rocket radius must be a positive number, got {radius!r}."
             )
-        if not isinstance(mass, (int, float)) or mass <= 0:
+        if not isinstance(mass, numbers.Real) or mass <= 0:
             raise InvalidParameterError(
                 f"Rocket mass must be a positive number, got {mass!r}."
             )
-        if not isinstance(inertia, (tuple, list)) or len(inertia) not in (3, 6):
+        try:
+            inertia_length = len(inertia)
+        except TypeError:
+            inertia_length = None
+        if isinstance(inertia, str) or inertia_length not in (3, 6):
             raise InvalidInertiaError(
-                "Inertia must be a tuple or list with 3 components (I_11, I_22, I_33) "
-                "or 6 components (I_11, I_22, I_33, I_12, I_13, I_23), "
-                f"got length {len(inertia) if isinstance(inertia, (tuple, list)) else 'N/A'}."
+                "Inertia must be a length-3 (I_11, I_22, I_33) or length-6 "
+                "(I_11, I_22, I_33, I_12, I_13, I_23) sequence, "
+                f"got {inertia!r}."
             )
 
         # Define rocket inertia attributes in SI units
@@ -760,27 +768,46 @@ class Rocket:
         self.static_margin.set_discrete(
             lower=0, upper=self.motor.burn_out_time, samples=200
         )
-        # Warn the user if the rocket is aerodynamically unstable at ignition.
-        # Skipped when GenericSurface instances are present: their lift
-        # coefficient derivative is not accounted for in
-        # evaluate_center_of_pressure, so the computed static margin does not
-        # reflect their contribution and cannot be trusted for this check.
+        return self.static_margin
+
+    def warn_if_unstable(self):
+        """Warn if the rocket is aerodynamically unstable at motor ignition.
+
+        Emits an :class:`UnstableRocketWarning` when the static margin at
+        ``t=0`` is negative. This is meant to be checked once the rocket is
+        fully assembled (e.g. when a :class:`Flight` is created), not during
+        incremental construction, so that partially-built-but-ultimately-stable
+        rockets do not raise spurious warnings.
+
+        The check is skipped when ``GenericSurface`` instances are present:
+        their lift coefficient derivative is not accounted for in
+        ``evaluate_center_of_pressure``, so the computed static margin does not
+        reflect their contribution and cannot be trusted for this check.
+
+        Returns
+        -------
+        bool
+            ``True`` if a warning was emitted, ``False`` otherwise.
+        """
         has_generic_surface = any(
             isinstance(aero_surface, GenericSurface)
             for aero_surface, _position in self.aerodynamic_surfaces
         )
-        if not has_generic_surface:
-            initial_static_margin = self.static_margin.get_value_opt(0)
-            if initial_static_margin < 0:
-                warnings.warn(
-                    f"The rocket has a negative static margin ({initial_static_margin:.2f} cal) "
-                    "at motor ignition (t=0), indicating an aerodynamically unstable "
-                    "configuration. Check the placement of fins and nose cone relative "
-                    "to the center of mass.",
-                    UnstableRocketWarning,
-                    stacklevel=2,
-                )
-        return self.static_margin
+        if has_generic_surface:
+            return False
+
+        initial_static_margin = self.static_margin.get_value_opt(0)
+        if initial_static_margin < 0:
+            warnings.warn(
+                f"The rocket has a negative static margin "
+                f"({initial_static_margin:.2f} cal) at motor ignition (t=0), "
+                "indicating an aerodynamically unstable configuration. Check the "
+                "placement of fins and nose cone relative to the center of mass.",
+                UnstableRocketWarning,
+                stacklevel=2,
+            )
+            return True
+        return False
 
     def evaluate_dry_inertias(self):
         """Calculates and returns the rocket's dry inertias relative to
@@ -1413,10 +1440,13 @@ class Rocket:
             Fin set object created.
         """
         if n <= 2:
-            raise ValueError(
-                "Number of fins must be greater than 2. "
-                "For 1 or 2 fins, create a FreeFormFin object "
-                "and add it to the rocket using the add_surfaces method."
+            warnings.warn(
+                "Fin sets with 2 or fewer fins assume a symmetric, evenly-spaced "
+                "configuration and may not accurately capture asymmetric forces. "
+                "For 1 or 2 fins, consider creating individual fin objects "
+                "(e.g. TrapezoidalFin) and adding them with add_surfaces.",
+                UserWarning,
+                stacklevel=2,
             )
 
         # Modify radius if not given, use rocket radius, otherwise use given.
@@ -1505,10 +1535,13 @@ class Rocket:
             Fin set object created.
         """
         if n <= 2:
-            raise ValueError(
-                "Number of fins must be greater than 2. "
-                "For 1 or 2 fins, create a FreeFormFin object "
-                "and add it to the rocket using the add_surfaces method."
+            warnings.warn(
+                "Fin sets with 2 or fewer fins assume a symmetric, evenly-spaced "
+                "configuration and may not accurately capture asymmetric forces. "
+                "For 1 or 2 fins, consider creating individual fin objects "
+                "(e.g. TrapezoidalFin) and adding them with add_surfaces.",
+                UserWarning,
+                stacklevel=2,
             )
 
         radius = radius if radius is not None else self.radius
@@ -1578,10 +1611,13 @@ class Rocket:
             Fin set object created.
         """
         if n <= 2:
-            raise ValueError(
-                "Number of fins must be greater than 2. "
-                "For 1 or 2 fins, create a FreeFormFin object "
-                "and add it to the rocket using the add_surfaces method."
+            warnings.warn(
+                "Fin sets with 2 or fewer fins assume a symmetric, evenly-spaced "
+                "configuration and may not accurately capture asymmetric forces. "
+                "For 1 or 2 fins, consider creating individual fin objects "
+                "(e.g. TrapezoidalFin) and adding them with add_surfaces.",
+                UserWarning,
+                stacklevel=2,
             )
 
         # Modify radius if not given, use rocket radius, otherwise use given.

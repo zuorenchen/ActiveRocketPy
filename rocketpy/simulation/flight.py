@@ -8,8 +8,6 @@ from functools import cached_property
 import numpy as np
 from scipy.integrate import BDF, DOP853, LSODA, RK23, RK45, OdeSolver, Radau
 
-from rocketpy.simulation.flight_data_exporter import FlightDataExporter
-
 from ..mathutils.function import Function, funcify_method
 from ..mathutils.vector_matrix import Matrix, Vector
 from ..motors.point_mass_motor import PointMassMotor
@@ -608,6 +606,11 @@ class Flight:
         # Save arguments
         self.env = environment
         self.rocket = rocket
+        # Warn about an aerodynamically unstable rocket now that it is fully
+        # assembled and about to be simulated. Doing it here (instead of on every
+        # add_surfaces call during construction) avoids spurious warnings for
+        # partially-built rockets that are ultimately stable.
+        self.rocket.warn_if_unstable()
         self.rail_length = rail_length
         if self.rail_length <= 0:  # pragma: no cover
             raise ValueError("Rail length must be a positive value.")
@@ -4002,11 +4005,20 @@ class Flight:
 
         return np.array(self.__post_processed_variables)
 
-    def calculate_stall_wind_velocity(self, stall_angle):  # TODO: move to utilities
-        """Function to calculate the maximum wind velocity before the angle of
-        attack exceeds a desired angle, at the instant of departing rail launch.
-        Can be helpful if you know the exact stall angle of all aerodynamics
-        surfaces.
+    @deprecated(
+        reason="This method is deprecated in version 1.13.0 and will be fully "
+        "removed by version 1.15.0",
+        alternative="rocketpy.utilities.calculate_stall_wind_velocity",
+    )
+    def calculate_stall_wind_velocity(self, stall_angle):
+        """Calculate the maximum wind velocity before the angle of attack exceeds
+        a desired angle, at the instant of departing rail launch. Can be helpful
+        if you know the exact stall angle of all aerodynamics surfaces.
+
+        .. deprecated:: 1.13.0
+           This method is deprecated and will be fully removed by version
+           1.15.0. Use :func:`rocketpy.utilities.calculate_stall_wind_velocity`
+           instead.
 
         Parameters
         ----------
@@ -4016,99 +4028,23 @@ class Flight:
 
         Return
         ------
-        None
+        float
+            Maximum wind velocity, in m/s, at rail departure before the angle of
+            attack exceeds ``stall_angle``.
         """
-        v_f = self.out_of_rail_velocity
+        # Imported lazily to avoid a circular import (utilities imports Flight).
+        from rocketpy.utilities import (  # pylint: disable=import-outside-toplevel
+            calculate_stall_wind_velocity,
+        )
 
-        theta = np.radians(self.inclination)
-        stall_angle = np.radians(stall_angle)
-
-        c = (math.cos(stall_angle) ** 2 - math.cos(theta) ** 2) / math.sin(
-            stall_angle
-        ) ** 2
-        w_v = (
-            2 * v_f * math.cos(theta) / c
-            + (
-                4 * v_f * v_f * math.cos(theta) * math.cos(theta) / (c**2)
-                + 4 * 1 * v_f * v_f / c
-            )
-            ** 0.5
-        ) / 2
-
-        stall_angle = np.degrees(stall_angle)
-        logger.info(
+        w_v = calculate_stall_wind_velocity(self, stall_angle)
+        # Display for interactive use, but also return the value so it is never
+        # silently lost (it was previously only logged at INFO level).
+        print(
             "Maximum wind velocity at Rail Departure time before angle "
-            "of attack exceeds %.3f°: %.3f m/s",
-            stall_angle,
-            w_v,
+            f"of attack exceeds {stall_angle:.3f}°: {w_v:.3f} m/s"
         )
-
-    @deprecated(
-        reason="Moved to FlightDataExporter.export_pressures()",
-        version="v1.12.0",
-        alternative="rocketpy.simulation.flight_data_exporter.FlightDataExporter.export_pressures",
-    )
-    def export_pressures(self, file_name, time_step):
-        """
-        .. deprecated:: 1.11
-           Use :class:`rocketpy.simulation.flight_data_exporter.FlightDataExporter`
-           and call ``.export_pressures(...)``.
-        """
-        return FlightDataExporter(self).export_pressures(file_name, time_step)
-
-    @deprecated(
-        reason="Moved to FlightDataExporter.export_data()",
-        version="v1.12.0",
-        alternative="rocketpy.simulation.flight_data_exporter.FlightDataExporter.export_data",
-    )
-    def export_data(self, file_name, *variables, time_step=None):
-        """
-        .. deprecated:: 1.11
-           Use :class:`rocketpy.simulation.flight_data_exporter.FlightDataExporter`
-           and call ``.export_data(...)``.
-        """
-        return FlightDataExporter(self).export_data(
-            file_name, *variables, time_step=time_step
-        )
-
-    @deprecated(
-        reason="Moved to FlightDataExporter.export_sensor_data()",
-        version="v1.12.0",
-        alternative="rocketpy.simulation.flight_data_exporter.FlightDataExporter.export_sensor_data",
-    )
-    def export_sensor_data(self, file_name, sensor=None):
-        """
-        .. deprecated:: 1.11
-           Use :class:`rocketpy.simulation.flight_data_exporter.FlightDataExporter`
-           and call ``.export_sensor_data(...)``.
-        """
-        return FlightDataExporter(self).export_sensor_data(file_name, sensor=sensor)
-
-    @deprecated(
-        reason="Moved to FlightDataExporter.export_kml()",
-        version="v1.12.0",
-        alternative="rocketpy.simulation.flight_data_exporter.FlightDataExporter.export_kml",
-    )
-    def export_kml(
-        self,
-        file_name="trajectory.kml",
-        time_step=None,
-        extrude=True,
-        color="641400F0",
-        altitude_mode="absolute",
-    ):
-        """
-        .. deprecated:: 1.11
-           Use :class:`rocketpy.simulation.flight_data_exporter.FlightDataExporter`
-           and call ``.export_kml(...)``.
-        """
-        return FlightDataExporter(self).export_kml(
-            file_name=file_name,
-            time_step=time_step,
-            extrude=extrude,
-            color=color,
-            altitude_mode=altitude_mode,
-        )
+        return w_v
 
     def info(self):
         """Prints out a summary of the data available about the Flight."""
@@ -4126,6 +4062,14 @@ class Flight:
             i += 1
 
     def to_dict(self, **kwargs):
+        # ``parachutes_info`` is populated as a side effect of the lazy
+        # post-processing pass (``add_information_to_flight`` is only called with
+        # ``post_processing=True``). Trigger that pass before reading the
+        # attribute so the per-parachute drag time series is serialized even for
+        # flights that have not been post-processed yet (e.g. flights without
+        # controllers that are saved before any acceleration/force property or
+        # plot is accessed). This is a no-op once post-processing has run.
+        _ = self.ax
         data = {
             "rocket": self.rocket,
             "env": self.env,
