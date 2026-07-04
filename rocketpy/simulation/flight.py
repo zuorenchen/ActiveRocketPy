@@ -4121,6 +4121,14 @@ class Flight:
             i += 1
 
     def to_dict(self, **kwargs):
+        # ``parachutes_info`` is populated as a side effect of the lazy
+        # post-processing pass (``add_information_to_flight`` is only called with
+        # ``post_processing=True``). Trigger that pass before reading the
+        # attribute so the per-parachute drag time series is serialized even for
+        # flights that have not been post-processed yet (e.g. flights without
+        # controllers that are saved before any acceleration/force property or
+        # plot is accessed). This is a no-op once post-processing has run.
+        _ = self.ax
         data = {
             "rocket": self.rocket,
             "env": self.env,
