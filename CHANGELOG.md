@@ -67,6 +67,7 @@ Attention: The newest changes should be on top -->
 
 ### Fixed
 
+- FIX: pre-release hardening — bug fixes across the unreleased features [#1047](https://github.com/RocketPy-Team/RocketPy/pull/1047)
 - BUG: Remove duplicate controller process; controllers were being invoked twice per time node [#949](https://github.com/RocketPy-Team/RocketPy/pull/949)
 - BUG: fix wind heading and direction wraparound interpolation [#974](https://github.com/RocketPy-Team/RocketPy/pull/974)
 - BUG: fix NaN in ND linear interpolation outside convex hull (closes [#926](https://github.com/RocketPy-Team/RocketPy/issues/926)) [#969](https://github.com/RocketPy-Team/RocketPy/pull/969)
