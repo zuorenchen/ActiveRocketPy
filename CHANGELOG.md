@@ -57,10 +57,16 @@ Attention: The newest changes should be on top -->
 
 ### Changed
 
-- 
+- ENH: Adopt built-in Python logging across the library. Runtime info/debug messages are now silent by default; call `rocketpy.utils.enable_logging()` to display them. Warnings and errors remain visible by default. [#973](https://github.com/RocketPy-Team/RocketPy/pull/973)
+- MNT: `Components.sort_by_position` now returns a new sorted `Components` object instead of sorting in place. [#818](https://github.com/RocketPy-Team/RocketPy/pull/818)
+- MNT: `Rocket.add_trapezoidal_fins`, `add_elliptical_fins` and `add_free_form_fins` now emit a warning (instead of raising) for fin sets with 2 or fewer fins; use the individual fin classes for asymmetric configurations. [#818](https://github.com/RocketPy-Team/RocketPy/pull/818)
+- MNT: `UnstableRocketWarning` is now emitted when a `Flight` is created (on the fully-assembled rocket) rather than on every incremental `add_surfaces`/`add_motor` call, avoiding spurious warnings during construction. [#970](https://github.com/RocketPy-Team/RocketPy/pull/970)
+- MNT: A set of `n` identical individual `Fin` objects does not reproduce the exact aggregate lift slope of a `Fins(n=...)` set (individual fins omit the empirical multi-fin interference correction by design); use the plural `*Fins` classes for standard symmetric fin sets. [#818](https://github.com/RocketPy-Team/RocketPy/pull/818)
 
 ### Deprecated
 
+- MNT: `Parachute` is now an abstract base class and can no longer be instantiated directly — use `HemisphericalParachute` (or another concrete subclass). Passing parachute parameters directly to `Rocket.add_parachute` (e.g. `add_parachute(name=, cd_s=, ...)`) is deprecated and will be removed in v1.14.0; instead build a `HemisphericalParachute` and pass it via the `parachute=` argument. [#958](https://github.com/RocketPy-Team/RocketPy/pull/958)
+- MNT: Importing from `rocketpy.rocket.parachute` is deprecated; import from `rocketpy.rocket.parachutes` instead (to be removed in v1.14.0). [#958](https://github.com/RocketPy-Team/RocketPy/pull/958)
 - MNT: Rename `radius` to `radius_function` in `CylindricalTank` and `SphericalTank`; old `radius=` keyword argument now raises `DeprecationWarning` [#957](https://github.com/RocketPy-Team/RocketPy/pull/957)
 
 ### Removed
