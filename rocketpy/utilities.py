@@ -1,6 +1,5 @@
 import inspect
 import json
-import logging
 import os
 import warnings
 from datetime import date
@@ -18,8 +17,6 @@ from .mathutils.function import Function
 from .plots.plot_helpers import show_or_save_plot
 from .rocket.aero_surface import TrapezoidalFins
 from .simulation.flight import Flight
-
-logger = logging.getLogger(__name__)
 
 
 def compute_cd_s_from_drop_test(
@@ -206,6 +203,43 @@ def calculate_equilibrium_altitude(
 
 
 # pylint: disable=too-many-statements
+def calculate_stall_wind_velocity(flight, stall_angle):
+    """Calculate the maximum wind velocity before the angle of attack exceeds a
+    desired stall angle, at the instant of departing the launch rail.
+
+    Can be helpful if you know the exact stall angle of all aerodynamic
+    surfaces.
+
+    Parameters
+    ----------
+    flight : rocketpy.Flight
+        Flight object containing the rocket's flight data. Its
+        ``out_of_rail_velocity`` and ``inclination`` attributes are used.
+    stall_angle : float
+        Angle, in degrees, for which you would like to know the maximum wind
+        speed before the angle of attack exceeds it.
+
+    Returns
+    -------
+    float
+        Maximum wind velocity, in m/s, at rail departure before the angle of
+        attack exceeds ``stall_angle``.
+    """
+    v_f = flight.out_of_rail_velocity
+    theta = np.radians(flight.inclination)
+    stall_angle_rad = np.radians(stall_angle)
+
+    c = (np.cos(stall_angle_rad) ** 2 - np.cos(theta) ** 2) / np.sin(
+        stall_angle_rad
+    ) ** 2
+    w_v = (
+        2 * v_f * np.cos(theta) / c
+        + (4 * v_f * v_f * np.cos(theta) * np.cos(theta) / (c**2) + 4 * v_f * v_f / c)
+        ** 0.5
+    ) / 2
+    return w_v
+
+
 def fin_flutter_analysis(
     fin_thickness,
     shear_modulus,
@@ -234,8 +268,7 @@ def fin_flutter_analysis(
     see_prints : boolean, optional
         True if you want to see the prints, False otherwise.
     see_graphs : boolean, optional
-        True if you want to see the graphs, False otherwise. If False, the
-        function will return the vectors containing the data for the graphs.
+        True if you want to see the graphs, False otherwise.
     filename : str | None, optional
         The path the plot should be saved to. By default None, in which case the
         plot will be shown instead of saved. Supported file endings are: eps,
@@ -244,7 +277,12 @@ def fin_flutter_analysis(
 
     Return
     ------
-    None
+    flutter_mach : rocketpy.Function
+        The Mach Number at which the fin flutter occurs as a function of time,
+        considering the variation of the speed of sound with altitude.
+    safety_factor : rocketpy.Function
+        The Safety Factor for the fin flutter as a function of time, defined as
+        the flutter Mach Number divided by the freestream Mach Number.
     """
     found_fin = False
     surface_area = None
@@ -287,8 +325,12 @@ def fin_flutter_analysis(
         )
     if see_graphs:
         _flutter_plots(flight, flutter_mach, safety_factor, filename=filename)
-    else:
-        return flutter_mach, safety_factor
+
+    # Always return the computed results so callers can use the flutter margin
+    # programmatically. These are safety-critical numbers and must never be
+    # silently discarded (they were previously only returned when
+    # ``see_graphs=False`` and otherwise only logged at INFO level).
+    return flutter_mach, safety_factor
 
 
 def _flutter_mach_number(
@@ -431,25 +473,20 @@ def _flutter_prints(
     min_sf = safety_factor[time_index, 1]
     altitude_min_sf = flight.z(time_min_sf) - flight.env.elevation
 
-    logger.info(
-        "Fin's parameters: Surface area (S)=%.4f m2 | AR=%.3f | \u03bb=%.3f"
-        " | Thickness=%.5f m | Shear Modulus (G)=%.3e Pa",
-        surface_area,
-        aspect_ratio,
-        lambda_,
-        fin_thickness,
-        shear_modulus,
+    # This is an explicit, opt-in report (gated on ``see_prints``), so it uses
+    # print() to display unconditionally rather than logging.info, which is
+    # silenced by default.
+    print(
+        f"Fin's parameters: Surface area (S)={surface_area:.4f} m2"
+        f" | AR={aspect_ratio:.3f} | \u03bb={lambda_:.3f}"
+        f" | Thickness={fin_thickness:.5f} m"
+        f" | Shear Modulus (G)={shear_modulus:.3e} Pa"
     )
-    logger.info(
-        "Fin Flutter Analysis: Min flutter velocity=%.3f m/s at t=%.2f s"
-        " | Min flutter Mach=%.3f | Min safety factor=%.3f at t=%.2f s"
-        " | Altitude of min safety factor=%.3f m (AGL)",
-        min_vel,
-        time_min_mach,
-        min_mach,
-        min_sf,
-        time_min_sf,
-        altitude_min_sf,
+    print(
+        f"Fin Flutter Analysis: Min flutter velocity={min_vel:.3f} m/s"
+        f" at t={time_min_mach:.2f} s | Min flutter Mach={min_mach:.3f}"
+        f" | Min safety factor={min_sf:.3f} at t={time_min_sf:.2f} s"
+        f" | Altitude of min safety factor={altitude_min_sf:.3f} m (AGL)"
     )
 
 

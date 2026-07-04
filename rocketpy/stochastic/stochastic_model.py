@@ -3,7 +3,6 @@ Defines the `StochasticModel` class, which is used as a base class for all other
 Stochastic classes.
 """
 
-import logging
 from random import choice
 
 import numpy as np
@@ -12,8 +11,6 @@ from rocketpy.mathutils.function import Function
 from rocketpy.stochastic.custom_sampler import CustomSampler
 
 from ..tools import get_distribution
-
-logger = logging.getLogger(__name__)
 
 # TODO: Stop using assert in production code. Use exceptions instead.
 # TODO: Each validation method should have a test case.
@@ -553,6 +550,11 @@ class StochasticModel:
         Model object. The report includes the variable name, the nominal value,
         the standard deviation, and the distribution function used to generate
         the random attributes.
+
+        Returns
+        -------
+        str
+            The formatted report. It is also printed for interactive use.
         """
 
         def format_attribute(attr, value):
@@ -633,4 +635,10 @@ class StochasticModel:
                 format_attribute(attr, attributes[attr]) for attr in custom_attributes
             )
 
-        logger.info("\n".join(filter(None, report)))
+        # This is an explicit, user-invoked display method, so it prints
+        # unconditionally (like ``info``/``all_info`` elsewhere) rather than
+        # logging at INFO level, which is silenced by default. The report is
+        # also returned so it can be used programmatically.
+        report_str = "\n".join(filter(None, report))
+        print(report_str)
+        return report_str

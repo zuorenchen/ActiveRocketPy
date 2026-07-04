@@ -117,6 +117,18 @@ def test_fin_flutter_analysis(flight_calisto_custom_wind):
     assert np.isclose(safety_factor(np.inf), 61.669562809629035, atol=5e-3)
 
 
+def test_calculate_stall_wind_velocity_returns_value(flight_calisto_custom_wind):
+    """Regression: the stall wind velocity must be returned (it was previously
+    only logged at INFO level and the method returned None, losing the value).
+    The Flight method and the utilities function must agree."""
+    w_v = flight_calisto_custom_wind.calculate_stall_wind_velocity(5)
+    assert isinstance(w_v, float)
+    assert w_v > 0
+    assert utilities.calculate_stall_wind_velocity(
+        flight_calisto_custom_wind, 5
+    ) == pytest.approx(w_v)
+
+
 def test_fin_flutter_analysis_with_prints(flight_calisto_custom_wind):
     """Test fin_flutter_analysis with see_prints=True to cover print branch.
 
@@ -150,16 +162,17 @@ def test_fin_flutter_analysis_with_graphs(mock_show, flight_calisto_custom_wind)
     flight_calisto_custom_wind : Flight
         A Flight object with a rocket with fins.
     """
-    result = utilities.fin_flutter_analysis(
+    flutter_mach, safety_factor = utilities.fin_flutter_analysis(
         fin_thickness=2 / 1000,
         shear_modulus=10e9,
         flight=flight_calisto_custom_wind,
         see_prints=False,
-        see_graphs=True,  # True = returns None!
+        see_graphs=True,
         filename=None,
     )
 
-    assert result is None
+    assert isinstance(flutter_mach, Function)
+    assert isinstance(safety_factor, Function)
     mock_show.assert_called()
 
 
@@ -174,16 +187,19 @@ def test_fin_flutter_analysis_complete_output(mock_show, flight_calisto_custom_w
     flight_calisto_custom_wind : Flight
         A Flight object with a rocket with fins.
     """
-    result = utilities.fin_flutter_analysis(
+    flutter_mach, safety_factor = utilities.fin_flutter_analysis(
         fin_thickness=2 / 1000,
         shear_modulus=10e9,
         flight=flight_calisto_custom_wind,
         see_prints=True,
-        see_graphs=True,  # True = returns None!
+        see_graphs=True,
         filename=None,
     )
 
-    assert result is None
+    # The flutter Mach number and safety factor are always returned, regardless
+    # of see_prints/see_graphs, so the safety-critical results are never lost.
+    assert isinstance(flutter_mach, Function)
+    assert isinstance(safety_factor, Function)
     mock_show.assert_called()
 
 

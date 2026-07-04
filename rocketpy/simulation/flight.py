@@ -4002,11 +4002,10 @@ class Flight:
 
         return np.array(self.__post_processed_variables)
 
-    def calculate_stall_wind_velocity(self, stall_angle):  # TODO: move to utilities
-        """Function to calculate the maximum wind velocity before the angle of
-        attack exceeds a desired angle, at the instant of departing rail launch.
-        Can be helpful if you know the exact stall angle of all aerodynamics
-        surfaces.
+    def calculate_stall_wind_velocity(self, stall_angle):
+        """Calculate the maximum wind velocity before the angle of attack exceeds
+        a desired angle, at the instant of departing rail launch. Can be helpful
+        if you know the exact stall angle of all aerodynamics surfaces.
 
         Parameters
         ----------
@@ -4016,32 +4015,23 @@ class Flight:
 
         Return
         ------
-        None
+        float
+            Maximum wind velocity, in m/s, at rail departure before the angle of
+            attack exceeds ``stall_angle``.
         """
-        v_f = self.out_of_rail_velocity
-
-        theta = np.radians(self.inclination)
-        stall_angle = np.radians(stall_angle)
-
-        c = (math.cos(stall_angle) ** 2 - math.cos(theta) ** 2) / math.sin(
-            stall_angle
-        ) ** 2
-        w_v = (
-            2 * v_f * math.cos(theta) / c
-            + (
-                4 * v_f * v_f * math.cos(theta) * math.cos(theta) / (c**2)
-                + 4 * 1 * v_f * v_f / c
-            )
-            ** 0.5
-        ) / 2
-
-        stall_angle = np.degrees(stall_angle)
-        logger.info(
-            "Maximum wind velocity at Rail Departure time before angle "
-            "of attack exceeds %.3f°: %.3f m/s",
-            stall_angle,
-            w_v,
+        # Imported lazily to avoid a circular import (utilities imports Flight).
+        from rocketpy.utilities import (  # pylint: disable=import-outside-toplevel
+            calculate_stall_wind_velocity,
         )
+
+        w_v = calculate_stall_wind_velocity(self, stall_angle)
+        # Display for interactive use, but also return the value so it is never
+        # silently lost (it was previously only logged at INFO level).
+        print(
+            "Maximum wind velocity at Rail Departure time before angle "
+            f"of attack exceeds {stall_angle:.3f}°: {w_v:.3f} m/s"
+        )
+        return w_v
 
     @deprecated(
         reason="Moved to FlightDataExporter.export_pressures()",
