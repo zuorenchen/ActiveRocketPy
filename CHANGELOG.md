@@ -32,6 +32,7 @@ Attention: The newest changes should be on top -->
 
 ### Added
 
+- ENH: CI: create a CI for testing docs updates + solve different docs issues [#1045](https://github.com/RocketPy-Team/RocketPy/pull/1045)
 - ENH: MNT: final fixes before next release [#1044](https://github.com/RocketPy-Team/RocketPy/pull/1044)
 - ENH: Individual Fins: add `Fin`, `TrapezoidalFin`, `EllipticalFin`, and `FreeFormFin` classes for modeling asymmetric or individually-positioned fins [#818](https://github.com/RocketPy-Team/RocketPy/pull/818)
 - ENH: Add AIGFS and HRRR forecast models to the Environment class [#951](https://github.com/RocketPy-Team/RocketPy/pull/951)
