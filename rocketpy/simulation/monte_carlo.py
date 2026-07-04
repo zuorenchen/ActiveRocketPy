@@ -572,6 +572,27 @@ class MonteCarlo:  # pylint: disable=too-many-public-methods
             either meeting the tolerance or reaching the maximum number of simulations.
         """
 
+        # Validate inputs up-front. Without this, a non-positive batch_size makes
+        # the loop run zero new simulations every iteration and spin forever.
+        if not isinstance(batch_size, (int, np.integer)) or batch_size <= 0:
+            raise ValueError(
+                f"'batch_size' must be a positive integer, got {batch_size!r}."
+            )
+        if not isinstance(max_simulations, (int, np.integer)) or max_simulations <= 0:
+            raise ValueError(
+                f"'max_simulations' must be a positive integer, got "
+                f"{max_simulations!r}."
+            )
+        if not isinstance(tolerance, (int, float)) or tolerance <= 0:
+            raise ValueError(
+                f"'tolerance' must be a positive number, got {tolerance!r}."
+            )
+        if not 0 < target_confidence < 1:
+            raise ValueError(
+                "'target_confidence' must be between 0 and 1 (exclusive), got "
+                f"{target_confidence!r}."
+            )
+
         self.import_outputs(self.filename.with_suffix(".outputs.txt"))
         confidence_interval_history = []
 
@@ -593,9 +614,22 @@ class MonteCarlo:  # pylint: disable=too-many-public-methods
                 confidence_level=target_confidence,
             )
 
-            confidence_interval_history.append(float(ci.high - ci.low))
+            width = float(ci.high - ci.low)
+            confidence_interval_history.append(width)
 
-            if float(ci.high - ci.low) <= tolerance:
+            # A NaN width means the target attribute contains NaN values; the
+            # tolerance check would never pass, so the loop would run to
+            # max_simulations and silently return a NaN history. Stop and warn.
+            if np.isnan(width):
+                warnings.warn(
+                    f"The confidence interval width for '{target_attribute}' is "
+                    "NaN, likely because the attribute contains NaN values. "
+                    "Stopping convergence early; check the simulation outputs.",
+                    stacklevel=2,
+                )
+                break
+
+            if width <= tolerance:
                 break
 
         return confidence_interval_history
