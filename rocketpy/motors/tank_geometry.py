@@ -431,6 +431,11 @@ class CylindricalTank(TankGeometry):
                 stacklevel=2,
             )
             radius_function = kwargs.pop("radius")
+        if kwargs:
+            raise TypeError(
+                "CylindricalTank.__init__() got unexpected keyword argument(s): "
+                f"{', '.join(map(repr, kwargs))}"
+            )
         if radius_function is None:
             raise TypeError(
                 "CylindricalTank.__init__() missing required argument: "
@@ -551,6 +556,11 @@ class SphericalTank(TankGeometry):
                 stacklevel=2,
             )
             radius_function = kwargs.pop("radius")
+        if kwargs:
+            raise TypeError(
+                "SphericalTank.__init__() got unexpected keyword argument(s): "
+                f"{', '.join(map(repr, kwargs))}"
+            )
         if radius_function is None:
             raise TypeError(
                 "SphericalTank.__init__() missing required argument: 'radius_function'"

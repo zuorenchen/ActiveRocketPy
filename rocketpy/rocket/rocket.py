@@ -1440,10 +1440,13 @@ class Rocket:
             Fin set object created.
         """
         if n <= 2:
-            raise ValueError(
-                "Number of fins must be greater than 2. "
-                "For 1 or 2 fins, create a FreeFormFin object "
-                "and add it to the rocket using the add_surfaces method."
+            warnings.warn(
+                "Fin sets with 2 or fewer fins assume a symmetric, evenly-spaced "
+                "configuration and may not accurately capture asymmetric forces. "
+                "For 1 or 2 fins, consider creating individual fin objects "
+                "(e.g. TrapezoidalFin) and adding them with add_surfaces.",
+                UserWarning,
+                stacklevel=2,
             )
 
         # Modify radius if not given, use rocket radius, otherwise use given.
@@ -1532,10 +1535,13 @@ class Rocket:
             Fin set object created.
         """
         if n <= 2:
-            raise ValueError(
-                "Number of fins must be greater than 2. "
-                "For 1 or 2 fins, create a FreeFormFin object "
-                "and add it to the rocket using the add_surfaces method."
+            warnings.warn(
+                "Fin sets with 2 or fewer fins assume a symmetric, evenly-spaced "
+                "configuration and may not accurately capture asymmetric forces. "
+                "For 1 or 2 fins, consider creating individual fin objects "
+                "(e.g. TrapezoidalFin) and adding them with add_surfaces.",
+                UserWarning,
+                stacklevel=2,
             )
 
         radius = radius if radius is not None else self.radius
@@ -1605,10 +1611,13 @@ class Rocket:
             Fin set object created.
         """
         if n <= 2:
-            raise ValueError(
-                "Number of fins must be greater than 2. "
-                "For 1 or 2 fins, create a FreeFormFin object "
-                "and add it to the rocket using the add_surfaces method."
+            warnings.warn(
+                "Fin sets with 2 or fewer fins assume a symmetric, evenly-spaced "
+                "configuration and may not accurately capture asymmetric forces. "
+                "For 1 or 2 fins, consider creating individual fin objects "
+                "(e.g. TrapezoidalFin) and adding them with add_surfaces.",
+                UserWarning,
+                stacklevel=2,
             )
 
         # Modify radius if not given, use rocket radius, otherwise use given.

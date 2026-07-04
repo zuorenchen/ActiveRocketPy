@@ -907,6 +907,16 @@ def test_rocket_accepts_numpy_inertia_and_scalars(inertia):
     assert rocket.I_33_without_motor == inertia[2]
 
 
+def test_add_trapezoidal_fins_two_fins_warns_but_succeeds(calisto):
+    """Regression: fin sets with n<=2 must still be accepted (as on master),
+    now with an informative warning instead of a hard error."""
+    with pytest.warns(UserWarning, match="2 or fewer fins"):
+        fins = calisto.add_trapezoidal_fins(
+            2, span=0.1, root_chord=0.12, tip_chord=0.04, position=-1.0
+        )
+    assert fins in [surface for surface, _ in calisto.aerodynamic_surfaces]
+
+
 def test_unstable_rocket_warning_raised(calisto):
     """UnstableRocketWarning must be raised (at finalization, e.g. via
     ``warn_if_unstable``) when the static margin at motor ignition is negative.
