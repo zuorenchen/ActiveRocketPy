@@ -774,6 +774,14 @@ class Flight:
                         print(f"Current Simulation Time: {self.t:3.4f} s", end="\r")
                         logger.debug("Current Simulation Time: %3.4f s", self.t)
 
+                    for controller in self._continuous_controllers:
+                        controller(
+                            self.t,
+                            self.y_sol,
+                            self.solution,
+                            self.sensors,
+                            self.env,
+                        )
                     if self.__check_simulation_events(phase, phase_index, node_index):
                         break  # Stop if simulation termination event occurred
 
@@ -1585,6 +1593,7 @@ class Flight:
     def __init_controllers(self):
         """Initialize controllers and sensors"""
         self._controllers = self.rocket._controllers[:]
+        self._continuous_controllers = [c for c in self._controllers if c.is_continuous]
         self.sensors = self.rocket.sensors.get_components()
 
         # reset controllable object to initial state (only airbrakes for now)
@@ -4468,6 +4477,9 @@ class Flight:
 
         def add_controllers(self, controllers, t_init, t_end):
             for controller in controllers:
+                # Skip node creation for continuous controllers
+                if controller.is_continuous:
+                    continue
                 # Calculate start of sampling time nodes
                 controller_time_step = 1 / controller.sampling_rate
                 controller_node_list = [

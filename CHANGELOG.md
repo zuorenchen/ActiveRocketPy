@@ -45,6 +45,7 @@ Attention: The newest changes should be on top -->
 - ENH: Monte Carlo Formatting Options [#947](https://github.com/RocketPy-Team/RocketPy/pull/947)
 - ENH: ENH: Auto-Detection of Pressure Conversion Factor [#966](https://github.com/RocketPy-Team/RocketPy/pull/966)
 - ENH: Auto-Detection of Pressure Conversion Factor [#966](https://github.com/RocketPy-Team/RocketPy/pull/966)
+- ENH: Discrete and Continuous Controllers [#946](https://github.com/RocketPy-Team/RocketPy/pull/946)
 - DOC: Add aerodynamic surfaces user guide [#1043](https://github.com/RocketPy-Team/RocketPy/pull/1043)
 - ENH: Add RingClusterMotor for annular clustered motor modeling [#924](https://github.com/RocketPy-Team/RocketPy/pull/924)
 - ENH: MNT: introduce pressure unit conversion when using forecast/reanalysis/ensemble data [#955](https://github.com/RocketPy-Team/RocketPy/pull/955)
