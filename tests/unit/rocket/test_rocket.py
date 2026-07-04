@@ -884,6 +884,29 @@ def test_rocket_invalid_inertia_length_raises(inertia):
         )
 
 
+@pytest.mark.parametrize(
+    "inertia",
+    [
+        np.array([6.321, 6.321, 0.034]),
+        np.array([6.321, 6.321, 0.034, 0.0, 0.0, 0.0]),
+    ],
+)
+def test_rocket_accepts_numpy_inertia_and_scalars(inertia):
+    """Regression: numpy-array inertia and numpy numeric scalars for
+    radius/mass must be accepted (they were rejected by an overly strict
+    isinstance check, breaking code that computes inertia tensors with numpy)."""
+    rocket = Rocket(
+        radius=np.float64(0.05),
+        mass=np.int64(10),
+        inertia=inertia,
+        power_off_drag=0.3,
+        power_on_drag=0.3,
+        center_of_mass_without_motor=0,
+    )
+    assert rocket.I_11_without_motor == inertia[0]
+    assert rocket.I_33_without_motor == inertia[2]
+
+
 def test_unstable_rocket_warning_raised(calisto):
     """UnstableRocketWarning must be raised (at finalization, e.g. via
     ``warn_if_unstable``) when the static margin at motor ignition is negative.

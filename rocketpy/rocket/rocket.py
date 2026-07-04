@@ -2,6 +2,7 @@ import csv
 import inspect
 import logging
 import math
+import numbers
 import warnings
 from typing import Iterable
 from warnings import warn
@@ -321,20 +322,27 @@ class Rocket:
                     + '"tail_to_nose" and "nose_to_tail".'
                 )
 
-        # Validate inputs
-        if not isinstance(radius, (int, float)) or radius <= 0:
+        # Validate inputs. Accept Python and NumPy numeric scalars for
+        # radius/mass, and any length-3 or length-6 sequence (tuple, list or
+        # numpy array) for inertia, matching the permissive behavior of earlier
+        # versions (numpy inputs are common when computing inertia tensors).
+        if not isinstance(radius, numbers.Real) or radius <= 0:
             raise InvalidParameterError(
                 f"Rocket radius must be a positive number, got {radius!r}."
             )
-        if not isinstance(mass, (int, float)) or mass <= 0:
+        if not isinstance(mass, numbers.Real) or mass <= 0:
             raise InvalidParameterError(
                 f"Rocket mass must be a positive number, got {mass!r}."
             )
-        if not isinstance(inertia, (tuple, list)) or len(inertia) not in (3, 6):
+        try:
+            inertia_length = len(inertia)
+        except TypeError:
+            inertia_length = None
+        if isinstance(inertia, str) or inertia_length not in (3, 6):
             raise InvalidInertiaError(
-                "Inertia must be a tuple or list with 3 components (I_11, I_22, I_33) "
-                "or 6 components (I_11, I_22, I_33, I_12, I_13, I_23), "
-                f"got length {len(inertia) if isinstance(inertia, (tuple, list)) else 'N/A'}."
+                "Inertia must be a length-3 (I_11, I_22, I_33) or length-6 "
+                "(I_11, I_22, I_33, I_12, I_13, I_23) sequence, "
+                f"got {inertia!r}."
             )
 
         # Define rocket inertia attributes in SI units
