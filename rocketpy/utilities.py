@@ -5,6 +5,7 @@ import warnings
 from datetime import date
 from importlib.metadata import version
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -16,7 +17,9 @@ from .environment.environment import Environment
 from .mathutils.function import Function
 from .plots.plot_helpers import show_or_save_plot
 from .rocket.aero_surface import TrapezoidalFins
-from .simulation.flight import Flight
+
+if TYPE_CHECKING:  # pragma: no cover
+    from .simulation.flight import Flight
 
 
 def compute_cd_s_from_drop_test(
@@ -524,6 +527,9 @@ def apogee_by_mass(flight, min_mass, max_mass, points=10, plot=True):
         Function object containing the estimated apogee as a function of the
         rocket's mass (without motor nor propellant).
     """
+    # Imported lazily to avoid a circular import (Flight imports utilities).
+    from .simulation.flight import Flight  # pylint: disable=import-outside-toplevel
+
     rocket = flight.rocket
 
     def apogee(mass):
@@ -594,6 +600,9 @@ def liftoff_speed_by_mass(flight, min_mass, max_mass, points=10, plot=True):
         Function object containing the estimated liftoff speed as a function of
         the rocket's mass (without motor nor propellant).
     """
+    # Imported lazily to avoid a circular import (Flight imports utilities).
+    from .simulation.flight import Flight  # pylint: disable=import-outside-toplevel
+
     rocket = flight.rocket
 
     def liftoff_speed(mass):
@@ -652,7 +661,7 @@ def get_instance_attributes(instance):
     return attributes_dict
 
 
-def save_to_rpy(flight: Flight, filename: str, include_outputs=False):
+def save_to_rpy(flight: "Flight", filename: str, include_outputs=False):
     """Saves a .rpy file into the given path, containing key simulation
     informations to reproduce the results.
 

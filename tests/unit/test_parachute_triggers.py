@@ -122,7 +122,9 @@ def test_five_arg_trigger_with_descriptive_names_receives_u_dot():
 
     recorded = {}
 
-    def user_trigger(pressure, altitude, state, sensor_list, state_derivative):
+    def user_trigger(  # pylint: disable=unused-argument
+        pressure, altitude, state, sensor_list, state_derivative
+    ):
         recorded["u_dot"] = (
             None if state_derivative is None else np.array(state_derivative)
         )

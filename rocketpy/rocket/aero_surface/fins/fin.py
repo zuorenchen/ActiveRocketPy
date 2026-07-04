@@ -336,7 +336,7 @@ class Fin(_BaseFin):
         cp,
         omega,
         *args,
-    ):  # pylint: disable=arguments-differ
+    ):  # pylint: disable=arguments-differ,unused-argument
         """Computes the forces and moments acting on the aerodynamic surface.
 
         Parameters
