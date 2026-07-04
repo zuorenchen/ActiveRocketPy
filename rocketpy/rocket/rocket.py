@@ -760,27 +760,46 @@ class Rocket:
         self.static_margin.set_discrete(
             lower=0, upper=self.motor.burn_out_time, samples=200
         )
-        # Warn the user if the rocket is aerodynamically unstable at ignition.
-        # Skipped when GenericSurface instances are present: their lift
-        # coefficient derivative is not accounted for in
-        # evaluate_center_of_pressure, so the computed static margin does not
-        # reflect their contribution and cannot be trusted for this check.
+        return self.static_margin
+
+    def warn_if_unstable(self):
+        """Warn if the rocket is aerodynamically unstable at motor ignition.
+
+        Emits an :class:`UnstableRocketWarning` when the static margin at
+        ``t=0`` is negative. This is meant to be checked once the rocket is
+        fully assembled (e.g. when a :class:`Flight` is created), not during
+        incremental construction, so that partially-built-but-ultimately-stable
+        rockets do not raise spurious warnings.
+
+        The check is skipped when ``GenericSurface`` instances are present:
+        their lift coefficient derivative is not accounted for in
+        ``evaluate_center_of_pressure``, so the computed static margin does not
+        reflect their contribution and cannot be trusted for this check.
+
+        Returns
+        -------
+        bool
+            ``True`` if a warning was emitted, ``False`` otherwise.
+        """
         has_generic_surface = any(
             isinstance(aero_surface, GenericSurface)
             for aero_surface, _position in self.aerodynamic_surfaces
         )
-        if not has_generic_surface:
-            initial_static_margin = self.static_margin.get_value_opt(0)
-            if initial_static_margin < 0:
-                warnings.warn(
-                    f"The rocket has a negative static margin ({initial_static_margin:.2f} cal) "
-                    "at motor ignition (t=0), indicating an aerodynamically unstable "
-                    "configuration. Check the placement of fins and nose cone relative "
-                    "to the center of mass.",
-                    UnstableRocketWarning,
-                    stacklevel=2,
-                )
-        return self.static_margin
+        if has_generic_surface:
+            return False
+
+        initial_static_margin = self.static_margin.get_value_opt(0)
+        if initial_static_margin < 0:
+            warnings.warn(
+                f"The rocket has a negative static margin "
+                f"({initial_static_margin:.2f} cal) at motor ignition (t=0), "
+                "indicating an aerodynamically unstable configuration. Check the "
+                "placement of fins and nose cone relative to the center of mass.",
+                UnstableRocketWarning,
+                stacklevel=2,
+            )
+            return True
+        return False
 
     def evaluate_dry_inertias(self):
         """Calculates and returns the rocket's dry inertias relative to

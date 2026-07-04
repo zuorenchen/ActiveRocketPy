@@ -885,8 +885,10 @@ def test_rocket_invalid_inertia_length_raises(inertia):
 
 
 def test_unstable_rocket_warning_raised(calisto):
-    """UnstableRocketWarning must be raised when the static margin at motor
-    ignition is negative."""
+    """UnstableRocketWarning must be raised (at finalization, e.g. via
+    ``warn_if_unstable``) when the static margin at motor ignition is negative.
+    The warning must NOT fire during incremental ``add_surfaces`` construction,
+    to avoid spurious warnings for partially-built-but-stable rockets."""
     nose = NoseCone(
         length=0.55829,
         kind="vonkarman",
@@ -894,8 +896,14 @@ def test_unstable_rocket_warning_raised(calisto):
         rocket_radius=0.0635,
         name="Nose Cone",
     )
-    with pytest.warns(UnstableRocketWarning):
+    # Adding surfaces during construction must not warn.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UnstableRocketWarning)
         calisto.add_surfaces(nose, 1.16)
+
+    # The check fires explicitly once the rocket is finalized.
+    with pytest.warns(UnstableRocketWarning):
+        calisto.warn_if_unstable()
     assert calisto.static_margin(0) < 0
 
 
@@ -921,6 +929,7 @@ def test_unstable_rocket_warning_skipped_with_generic_surface(calisto):
     with warnings.catch_warnings():
         warnings.simplefilter("error", UnstableRocketWarning)
         calisto.add_surfaces([nose, generic_surface], [1.16, 0])
+        calisto.warn_if_unstable()
     assert calisto.static_margin(0) < 0
 
 

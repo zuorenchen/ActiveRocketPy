@@ -608,6 +608,11 @@ class Flight:
         # Save arguments
         self.env = environment
         self.rocket = rocket
+        # Warn about an aerodynamically unstable rocket now that it is fully
+        # assembled and about to be simulated. Doing it here (instead of on every
+        # add_surfaces call during construction) avoids spurious warnings for
+        # partially-built rockets that are ultimately stable.
+        self.rocket.warn_if_unstable()
         self.rail_length = rail_length
         if self.rail_length <= 0:  # pragma: no cover
             raise ValueError("Rail length must be a positive value.")
