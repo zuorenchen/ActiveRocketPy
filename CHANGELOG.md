@@ -32,6 +32,15 @@ Attention: The newest changes should be on top -->
 
 ### Added
 
+### Changed
+
+### Fixed
+
+
+## [v1.13.0] - 2026-07-04
+
+### Added
+
 - ENH: FIX: pre release hardening [#1047](https://github.com/RocketPy-Team/RocketPy/pull/1047)
 - ENH: DEV: Claude Code ruff hooks (auto-format on edit + pre-push lint guard) [#1046](https://github.com/RocketPy-Team/RocketPy/pull/1046)
 - ENH: CI: create a CI for testing docs updates + solve different docs issues [#1045](https://github.com/RocketPy-Team/RocketPy/pull/1045)
@@ -57,6 +66,8 @@ Attention: The newest changes should be on top -->
 - MNT: Configure Renovate Bot targeting develop branch [#972](https://github.com/RocketPy-Team/RocketPy/pull/972)
 
 ### Changed
+
+- REL: bumps up rocketpy version to 1.13.0 [#XXXX](https://github.com/RocketPy-Team/RocketPy/pull/XXXX)
 
 ### Deprecated
 
