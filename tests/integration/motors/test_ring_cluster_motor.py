@@ -208,3 +208,46 @@ def test_ring_cluster_motor_full_flight(
     assert flight.rocket.motor is cluster
     assert flight.t_final > 0
     assert flight.apogee > flight.env.elevation
+
+
+def test_cluster_transverse_inertia_asymmetry(base_motor):
+    """For N=2 the ring cluster is not axisymmetric, so the assembled I_22 must
+    differ from I_11. For a symmetric N=4 arrangement they must match. The base
+    Motor.I_22 previously returned I_11 unconditionally, which was wrong for the
+    N=2 case the class was specifically designed to handle."""
+    cluster_2 = RingClusterMotor(motor=base_motor, number=2, radius=0.5)
+    assert not np.isclose(cluster_2.I_22(1.0), cluster_2.I_11(1.0))
+
+    cluster_4 = RingClusterMotor(motor=base_motor, number=4, radius=0.5)
+    assert np.isclose(cluster_4.I_22(1.0), cluster_4.I_11(1.0))
+
+
+def test_cluster_scales_nozzle_area_and_forwards_reference_pressure():
+    """The cluster must forward the base motor's reference_pressure and scale
+    the nozzle exit area by the number of motors, so the pressure-thrust
+    correction stays consistent with the N-scaled thrust."""
+    thrust_curve = Function(lambda t: 1000 if t < 5 else 0, "Time (s)", "Thrust (N)")
+    motor = SolidMotor(
+        thrust_source=thrust_curve,
+        burn_time=5,
+        dry_mass=10.0,
+        dry_inertia=(1.0, 1.0, 0.1),
+        grain_number=1,
+        grain_density=1000,
+        grain_outer_radius=0.05,
+        grain_initial_inner_radius=0.02,
+        grain_initial_height=0.5,
+        coordinate_system_orientation="nozzle_to_combustion_chamber",
+        nozzle_radius=0.02,
+        grain_separation=0.001,
+        grains_center_of_mass_position=0.25,
+        center_of_dry_mass_position=0.25,
+        reference_pressure=101325,
+    )
+    number = 3
+    cluster = RingClusterMotor(motor=motor, number=number, radius=0.2)
+
+    assert cluster.reference_pressure == 101325
+    assert np.isclose(cluster.nozzle_area, np.pi * motor.nozzle_radius**2 * number)
+    # Vacuum thrust must be N times the single-motor vacuum thrust.
+    assert np.isclose(cluster.vacuum_thrust(1), motor.vacuum_thrust(1) * number)

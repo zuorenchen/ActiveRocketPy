@@ -2,7 +2,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-from ..mathutils.function import Function
+from ..mathutils.function import Function, funcify_method
+from ..tools import parallel_axis_theorem_from_com
 from .motor import Motor
 
 
@@ -71,8 +72,16 @@ class RingClusterMotor(Motor):
             dry_inertia=dry_inertia_cluster,
             center_of_dry_mass_position=motor.center_of_dry_mass_position,
             coordinate_system_orientation=motor.coordinate_system_orientation,
+            reference_pressure=motor.reference_pressure,
             interpolation_method="linear",
         )
+
+        # The cluster has ``number`` nozzles, so its total exit area (used for
+        # the pressure-thrust / vacuum-thrust correction, which must be
+        # consistent with the thrust that was scaled by ``number``) is
+        # ``number`` times a single nozzle's area. ``nozzle_radius`` is kept as
+        # the single-nozzle radius.
+        self.nozzle_area = np.pi * motor.nozzle_radius**2 * number
 
         self._setup_grain_properties()
         self._propellant_mass = self.motor.propellant_mass * self.number
@@ -101,6 +110,27 @@ class RingClusterMotor(Motor):
         self._propellant_I_12 = zero_func
         self._propellant_I_13 = zero_func
         self._propellant_I_23 = zero_func
+
+    @funcify_method("Time (s)", "Inertia I_22 (kg m²)")
+    def I_22(self):
+        """Assembled (dry + propellant) transverse inertia about the e_2 axis.
+
+        Overrides :meth:`Motor.I_22`, which assumes ``I_22 == I_11`` by
+        axisymmetry. A ring cluster is not axisymmetric for small ``number``
+        (notably ``number == 2``), so ``I_22`` differs from ``I_11`` and must be
+        computed from the separately-evaluated ``_22`` components.
+        """
+        prop_I_22 = parallel_axis_theorem_from_com(
+            self.propellant_I_22,
+            self.propellant_mass,
+            self.center_of_propellant_mass - self.center_of_mass,
+        )
+        dry_I_22 = parallel_axis_theorem_from_com(
+            self.dry_I_22,
+            self.dry_mass,
+            self.center_of_dry_mass_position - self.center_of_mass,
+        )
+        return prop_I_22 + dry_I_22
 
     def _setup_grain_properties(self):
         """Copies the grain properties from the base motor."""
