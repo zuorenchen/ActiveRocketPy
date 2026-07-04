@@ -121,7 +121,8 @@ def test_calculate_stall_wind_velocity_returns_value(flight_calisto_custom_wind)
     """Regression: the stall wind velocity must be returned (it was previously
     only logged at INFO level and the method returned None, losing the value).
     The Flight method and the utilities function must agree."""
-    w_v = flight_calisto_custom_wind.calculate_stall_wind_velocity(5)
+    with pytest.warns(DeprecationWarning):
+        w_v = flight_calisto_custom_wind.calculate_stall_wind_velocity(5)
     assert isinstance(w_v, float)
     assert w_v > 0
     assert utilities.calculate_stall_wind_velocity(

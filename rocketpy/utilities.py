@@ -202,7 +202,6 @@ def calculate_equilibrium_altitude(
     return altitude_function, velocity_function, final_sol
 
 
-# pylint: disable=too-many-statements
 def calculate_stall_wind_velocity(flight, stall_angle):
     """Calculate the maximum wind velocity before the angle of attack exceeds a
     desired stall angle, at the instant of departing the launch rail.

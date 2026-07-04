@@ -8,8 +8,6 @@ from functools import cached_property
 import numpy as np
 from scipy.integrate import BDF, DOP853, LSODA, RK23, RK45, OdeSolver, Radau
 
-from rocketpy.simulation.flight_data_exporter import FlightDataExporter
-
 from ..mathutils.function import Function, funcify_method
 from ..mathutils.vector_matrix import Matrix, Vector
 from ..motors.point_mass_motor import PointMassMotor
@@ -4007,10 +4005,20 @@ class Flight:
 
         return np.array(self.__post_processed_variables)
 
+    @deprecated(
+        reason="This method is deprecated in version 1.13.0 and will be fully "
+        "removed by version 1.15.0",
+        alternative="rocketpy.utilities.calculate_stall_wind_velocity",
+    )
     def calculate_stall_wind_velocity(self, stall_angle):
         """Calculate the maximum wind velocity before the angle of attack exceeds
         a desired angle, at the instant of departing rail launch. Can be helpful
         if you know the exact stall angle of all aerodynamics surfaces.
+
+        .. deprecated:: 1.13.0
+           This method is deprecated and will be fully removed by version
+           1.15.0. Use :func:`rocketpy.utilities.calculate_stall_wind_velocity`
+           instead.
 
         Parameters
         ----------
@@ -4037,73 +4045,6 @@ class Flight:
             f"of attack exceeds {stall_angle:.3f}°: {w_v:.3f} m/s"
         )
         return w_v
-
-    @deprecated(
-        reason="Moved to FlightDataExporter.export_pressures()",
-        version="v1.12.0",
-        alternative="rocketpy.simulation.flight_data_exporter.FlightDataExporter.export_pressures",
-    )
-    def export_pressures(self, file_name, time_step):
-        """
-        .. deprecated:: 1.11
-           Use :class:`rocketpy.simulation.flight_data_exporter.FlightDataExporter`
-           and call ``.export_pressures(...)``.
-        """
-        return FlightDataExporter(self).export_pressures(file_name, time_step)
-
-    @deprecated(
-        reason="Moved to FlightDataExporter.export_data()",
-        version="v1.12.0",
-        alternative="rocketpy.simulation.flight_data_exporter.FlightDataExporter.export_data",
-    )
-    def export_data(self, file_name, *variables, time_step=None):
-        """
-        .. deprecated:: 1.11
-           Use :class:`rocketpy.simulation.flight_data_exporter.FlightDataExporter`
-           and call ``.export_data(...)``.
-        """
-        return FlightDataExporter(self).export_data(
-            file_name, *variables, time_step=time_step
-        )
-
-    @deprecated(
-        reason="Moved to FlightDataExporter.export_sensor_data()",
-        version="v1.12.0",
-        alternative="rocketpy.simulation.flight_data_exporter.FlightDataExporter.export_sensor_data",
-    )
-    def export_sensor_data(self, file_name, sensor=None):
-        """
-        .. deprecated:: 1.11
-           Use :class:`rocketpy.simulation.flight_data_exporter.FlightDataExporter`
-           and call ``.export_sensor_data(...)``.
-        """
-        return FlightDataExporter(self).export_sensor_data(file_name, sensor=sensor)
-
-    @deprecated(
-        reason="Moved to FlightDataExporter.export_kml()",
-        version="v1.12.0",
-        alternative="rocketpy.simulation.flight_data_exporter.FlightDataExporter.export_kml",
-    )
-    def export_kml(
-        self,
-        file_name="trajectory.kml",
-        time_step=None,
-        extrude=True,
-        color="641400F0",
-        altitude_mode="absolute",
-    ):
-        """
-        .. deprecated:: 1.11
-           Use :class:`rocketpy.simulation.flight_data_exporter.FlightDataExporter`
-           and call ``.export_kml(...)``.
-        """
-        return FlightDataExporter(self).export_kml(
-            file_name=file_name,
-            time_step=time_step,
-            extrude=extrude,
-            color=color,
-            altitude_mode=altitude_mode,
-        )
 
     def info(self):
         """Prints out a summary of the data available about the Flight."""
