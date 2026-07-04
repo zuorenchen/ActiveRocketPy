@@ -293,7 +293,14 @@ class _FlightPlots:
 
             rocket.pos(x_position, y_position, z_position)
             if angle_deg != 0.0:
-                rocket.rotate(angle_deg, axis=axis)
+                # Rotate about the rocket's placed position. vedo's rotate()
+                # rotates about the world origin by default, which would map the
+                # model to R @ pos and displace it from its trajectory point.
+                rocket.rotate(
+                    angle_deg,
+                    axis=axis,
+                    point=(x_position, y_position, z_position),
+                )
 
             trajectory_points.append([x_position, y_position, z_position])
             actors = [world, rocket]
@@ -305,6 +312,7 @@ class _FlightPlots:
             start_pause = time.time()
             while time.time() - start_pause < time_step:
                 plt.render()
+                time.sleep(0.001)  # yield the CPU instead of busy-spinning
 
             if getattr(plt, "escaped", False):
                 break
@@ -366,13 +374,16 @@ class _FlightPlots:
 
             rocket.pos(x_start, y_start, z_start)
             if angle_deg != 0.0:
-                rocket.rotate(angle_deg, axis=axis)
+                # Rotate about the rocket's placed position (vedo rotates about
+                # the world origin by default, which would displace the model).
+                rocket.rotate(angle_deg, axis=axis, point=(x_start, y_start, z_start))
 
             plt.show(world, rocket, resetcam=False)
 
             start_pause = time.time()
             while time.time() - start_pause < time_step:
                 plt.render()
+                time.sleep(0.001)  # yield the CPU instead of busy-spinning
 
             if getattr(plt, "escaped", False):
                 break

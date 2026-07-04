@@ -191,8 +191,8 @@ class _DummyVedoActor:
     def wireframe(self):
         return self
 
-    def rotate(self, angle, axis=None):
-        self.rotations.append((angle, axis))
+    def rotate(self, angle, axis=None, point=None):
+        self.rotations.append((angle, axis, point))
         return self
 
     def clone(self):
