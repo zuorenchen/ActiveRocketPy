@@ -291,6 +291,25 @@ class RingClusterMotor(Motor):
         print(f" - Radial Distance: {self.radius} m")
         return self.motor.info(*args, **kwargs)
 
+    def to_dict(self, **kwargs):
+        data = super().to_dict(**kwargs)
+        data.update(
+            {
+                "motor": self.motor,
+                "number": self.number,
+                "radius": self.radius,
+            }
+        )
+        return data
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(
+            motor=data["motor"],
+            number=data["number"],
+            radius=data["radius"],
+        )
+
     def draw_cluster_layout(self, rocket_radius=None, show=True):
         """Draw the geometric layout of the clustered motors."""
         fig, ax = plt.subplots(figsize=(6, 6))
