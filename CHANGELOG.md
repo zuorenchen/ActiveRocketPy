@@ -32,6 +32,7 @@ Attention: The newest changes should be on top -->
 
 ### Added
 
+- ENH: ENH: Refactor flight.py latitude/longitude to use inverted_haversine [#1055](https://github.com/RocketPy-Team/RocketPy/pull/1055)
 - ENH: TST: Add unit tests for evaluate_reduced_mass and remove TODO [#1051](https://github.com/RocketPy-Team/RocketPy/pull/1051)
 - ENH: FIX: pre release hardening [#1047](https://github.com/RocketPy-Team/RocketPy/pull/1047)
 - ENH: DEV: Claude Code ruff hooks (auto-format on edit + pre-push lint guard) [#1046](https://github.com/RocketPy-Team/RocketPy/pull/1046)
