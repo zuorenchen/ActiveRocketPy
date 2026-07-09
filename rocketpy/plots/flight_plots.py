@@ -1379,9 +1379,6 @@ class _FlightPlots:
             )
             return
 
-        # Axis label (and unit) for each known dynamic variable.
-        variable_labels = {"drag": ("Drag Force", "N")}
-
         # Gather every dynamic variable across the selected parachutes so each
         # one is drawn on a single figure with all parachutes overlaid.
         variables = []
@@ -1391,26 +1388,34 @@ class _FlightPlots:
                     variables.append(variable)
 
         for variable in variables:
-            label, unit = variable_labels.get(
-                variable, (variable.replace("_", " ").title(), "")
-            )
-            ylabel = f"{label} ({unit})" if unit else label
+            self.__plot_parachute_variable(variable, items)
 
-            plt.figure(figsize=(9, 4))
-            for name, parachute_variables in items:
-                if variable not in parachute_variables:
-                    continue
-                plt.plot(
-                    parachute_variables["t"],
-                    parachute_variables[variable],
-                    label=name,
-                )
-            plt.title(f"Parachute {label} vs Time")
-            plt.xlabel("Time (s)")
-            plt.ylabel(ylabel)
-            plt.legend()
-            plt.grid(True)
-            show_or_save_plot()
+    # Axis label (and unit) for each known parachute dynamic variable.
+    __parachute_variable_labels = {"drag": ("Drag Force", "N")}
+
+    def __plot_parachute_variable(self, variable, items):
+        """Plot a single parachute dynamic variable (e.g. drag) for every
+        parachute in ``items`` overlaid on one figure, one colour each."""
+        label, unit = self.__parachute_variable_labels.get(
+            variable, (variable.replace("_", " ").title(), "")
+        )
+        ylabel = f"{label} ({unit})" if unit else label
+
+        plt.figure(figsize=(9, 4))
+        for name, parachute_variables in items:
+            if variable not in parachute_variables:
+                continue
+            plt.plot(
+                parachute_variables["t"],
+                parachute_variables[variable],
+                label=name,
+            )
+        plt.title(f"Parachute {label} vs Time")
+        plt.xlabel("Time (s)")
+        plt.ylabel(ylabel)
+        plt.legend()
+        plt.grid(True)
+        show_or_save_plot()
 
     def all(self):  # pylint: disable=too-many-statements
         """Prints out all plots available about the Flight.
