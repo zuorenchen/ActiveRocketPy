@@ -1,4 +1,3 @@
-from . import utils
 from .control import _Controller
 from .environment import Environment, EnvironmentAnalysis
 from .exceptions import (
@@ -70,3 +69,8 @@ from .stochastic import (
     StochasticTail,
     StochasticTrapezoidalFins,
 )
+
+# Imported last: utilities pulls in Environment/Rocket/encoders, which are only
+# fully available once the imports above have run. Exposes
+# ``rocketpy.utilities`` (including ``enable_logging``) on ``import rocketpy``.
+from . import utilities

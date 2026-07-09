@@ -32,6 +32,15 @@ Attention: The newest changes should be on top -->
 
 ### Added
 
+### Changed
+
+### Fixed
+
+
+## [v1.13.0] - 2026-07-04
+
+### Added
+
 - ENH: ENH: Refactor flight.py latitude/longitude to use inverted_haversine [#1055](https://github.com/RocketPy-Team/RocketPy/pull/1055)
 - ENH: TST: Add unit tests for evaluate_reduced_mass and remove TODO [#1051](https://github.com/RocketPy-Team/RocketPy/pull/1051)
 - ENH: FIX: pre release hardening [#1047](https://github.com/RocketPy-Team/RocketPy/pull/1047)
@@ -60,6 +69,11 @@ Attention: The newest changes should be on top -->
 
 ### Changed
 
+- REL: bumps up rocketpy version to 1.13.0 [#1048](https://github.com/RocketPy-Team/RocketPy/pull/1048)
+- MNT: **Breaking**: `Parachute` is now an abstract base class and can no longer be instantiated directly; use `HemisphericalParachute` (or `Rocket.add_parachute`, which builds it for you). Loading old serialized files still works [#958](https://github.com/RocketPy-Team/RocketPy/pull/958)
+- MNT: Discrete controllers are now called exactly once per time node (previously twice); results may change for stateful controllers and `observed_variables` no longer contains duplicated entries [#949](https://github.com/RocketPy-Team/RocketPy/pull/949)
+- MNT: Multi-dimensional linear `Function` objects now apply their extrapolation rule to points outside the data's convex hull (previously returned NaN) [#969](https://github.com/RocketPy-Team/RocketPy/pull/969)
+- MNT: Informational messages previously shown with `print()` now use Python logging and are silent by default; call `rocketpy.utils.enable_logging()` to see them [#973](https://github.com/RocketPy-Team/RocketPy/pull/973)
 - ENH: Refactor flight.py latitude/longitude to use inverted_haversine [#1055](https://github.com/RocketPy-Team/RocketPy/pull/1055)
 
 ### Deprecated
@@ -72,6 +86,8 @@ Attention: The newest changes should be on top -->
 
 ### Fixed
 
+- BUG: fix individual fin (`TrapezoidalFin`, `EllipticalFin`, `FreeFormFin`) serialization crash when saving rockets/flights [#1048](https://github.com/RocketPy-Team/RocketPy/pull/1048)
+- BUG: support the new Wyoming sounding WSGI page format (legacy cgi-bin endpoint was discontinued by UWyo) [#1048](https://github.com/RocketPy-Team/RocketPy/pull/1048)
 - FIX: pre-release hardening — bug fixes across the unreleased features [#1047](https://github.com/RocketPy-Team/RocketPy/pull/1047)
 - BUG: Remove duplicate controller process; controllers were being invoked twice per time node [#949](https://github.com/RocketPy-Team/RocketPy/pull/949)
 - BUG: fix wind heading and direction wraparound interpolation [#974](https://github.com/RocketPy-Team/RocketPy/pull/974)
