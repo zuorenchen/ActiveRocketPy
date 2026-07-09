@@ -1,3 +1,4 @@
+import logging
 import os
 from unittest.mock import patch
 
@@ -345,3 +346,79 @@ def test_load_from_rpy(mock_show):  # pylint: disable=unused-argument
     )
     assert loaded_flight.info() is None
     assert loaded_flight.all_info() is None
+
+
+# --- Logging (rocketpy.utilities.enable_logging) ------------------------------
+
+
+@pytest.fixture
+def reset_rocketpy_logger():
+    """Reset the rocketpy logger to its original state after each test."""
+    logger = logging.getLogger("rocketpy")
+    original_level = logger.level
+    original_handlers = logger.handlers[:]
+    yield
+    logger.handlers = original_handlers
+    logger.setLevel(original_level)
+
+
+def test_enable_logging_adds_stream_handler(reset_rocketpy_logger):
+    """enable_logging() must attach a StreamHandler to the rocketpy logger."""
+    utilities.enable_logging(level="INFO")
+
+    logger = logging.getLogger("rocketpy")
+    stream_handlers = [
+        h for h in logger.handlers if isinstance(h, logging.StreamHandler)
+    ]
+    assert len(stream_handlers) >= 1
+
+
+def test_enable_logging_sets_correct_level(reset_rocketpy_logger):
+    """enable_logging() must set the requested level on the rocketpy logger."""
+    utilities.enable_logging(level="DEBUG")
+    assert logging.getLogger("rocketpy").level == logging.DEBUG
+
+    utilities.enable_logging(level="WARNING")
+    assert logging.getLogger("rocketpy").level == logging.WARNING
+
+
+def test_enable_logging_no_duplicate_handlers(reset_rocketpy_logger):
+    """Calling enable_logging() twice must not duplicate StreamHandlers."""
+    utilities.enable_logging(level="INFO")
+    utilities.enable_logging(level="INFO")
+
+    logger = logging.getLogger("rocketpy")
+    stream_handlers = [
+        h for h in logger.handlers if isinstance(h, logging.StreamHandler)
+    ]
+    assert len(stream_handlers) == 1
+
+
+def test_enable_logging_replaces_handler_on_level_change(reset_rocketpy_logger):
+    """Calling enable_logging() with a new level must replace the old handler."""
+    utilities.enable_logging(level="WARNING")
+    utilities.enable_logging(level="DEBUG")
+
+    logger = logging.getLogger("rocketpy")
+    stream_handlers = [
+        h for h in logger.handlers if isinstance(h, logging.StreamHandler)
+    ]
+    assert len(stream_handlers) == 1
+    assert logger.level == logging.DEBUG
+
+
+def test_enable_logging_invalid_level_raises(reset_rocketpy_logger):
+    """enable_logging() must raise ValueError for an unrecognised level string."""
+    with pytest.raises(ValueError, match="Invalid logging level"):
+        utilities.enable_logging(level="INVALID")
+
+
+def test_enable_logging_messages_are_captured(reset_rocketpy_logger, caplog):
+    """After enable_logging(), internal rocketpy log messages must be visible."""
+    utilities.enable_logging(level="DEBUG")
+
+    with caplog.at_level(logging.DEBUG, logger="rocketpy"):
+        logger = logging.getLogger("rocketpy.simulation.flight")
+        logger.info("test message from flight")
+
+    assert "test message from flight" in caplog.text
