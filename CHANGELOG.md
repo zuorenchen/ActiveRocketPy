@@ -41,6 +41,8 @@ Attention: The newest changes should be on top -->
 
 ### Added
 
+- ENH: ENH: Refactor flight.py latitude/longitude to use inverted_haversine [#1055](https://github.com/RocketPy-Team/RocketPy/pull/1055)
+- ENH: TST: Add unit tests for evaluate_reduced_mass and remove TODO [#1051](https://github.com/RocketPy-Team/RocketPy/pull/1051)
 - ENH: FIX: pre release hardening [#1047](https://github.com/RocketPy-Team/RocketPy/pull/1047)
 - ENH: DEV: Claude Code ruff hooks (auto-format on edit + pre-push lint guard) [#1046](https://github.com/RocketPy-Team/RocketPy/pull/1046)
 - ENH: CI: create a CI for testing docs updates + solve different docs issues [#1045](https://github.com/RocketPy-Team/RocketPy/pull/1045)
@@ -72,6 +74,7 @@ Attention: The newest changes should be on top -->
 - MNT: Discrete controllers are now called exactly once per time node (previously twice); results may change for stateful controllers and `observed_variables` no longer contains duplicated entries [#949](https://github.com/RocketPy-Team/RocketPy/pull/949)
 - MNT: Multi-dimensional linear `Function` objects now apply their extrapolation rule to points outside the data's convex hull (previously returned NaN) [#969](https://github.com/RocketPy-Team/RocketPy/pull/969)
 - MNT: Informational messages previously shown with `print()` now use Python logging and are silent by default; call `rocketpy.utils.enable_logging()` to see them [#973](https://github.com/RocketPy-Team/RocketPy/pull/973)
+- ENH: Refactor flight.py latitude/longitude to use inverted_haversine [#1055](https://github.com/RocketPy-Team/RocketPy/pull/1055)
 
 ### Deprecated
 
