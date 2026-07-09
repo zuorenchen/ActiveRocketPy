@@ -1,3 +1,4 @@
+import logging
 import warnings
 
 import numpy as np
@@ -8,6 +9,8 @@ from rocketpy.plots.aero_surface_plots import _NoseConePlots
 from rocketpy.prints.aero_surface_prints import _NoseConePrints
 
 from .aero_surface import AeroSurface
+
+logger = logging.getLogger(__name__)
 
 
 class NoseCone(AeroSurface):
@@ -445,9 +448,11 @@ class NoseCone(AeroSurface):
         self.shape_vec = [nosecone_x, nosecone_y]
         if abs(nosecone_x[-1] - self.length) >= 0.001:  # 1 millimeter
             self._length = nosecone_x[-1]
-            print(
-                "Due to the chosen bluffness ratio, the nose "
-                f"cone length was reduced to {self.length} m."
+            warnings.warn(
+                f"Due to the chosen bluffness ratio, the nose cone length was "
+                f"reduced to {self.length:.4f} m.",
+                UserWarning,
+                stacklevel=2,
             )
         self.fineness_ratio = self.length / (2 * self.base_radius)
 

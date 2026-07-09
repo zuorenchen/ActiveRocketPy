@@ -11,6 +11,7 @@ import functools
 import importlib
 import importlib.metadata
 import json
+import logging
 import math
 import re
 import time
@@ -24,6 +25,8 @@ import pytz
 from cftime import num2pydate
 from matplotlib.patches import Ellipse
 from packaging import version as packaging_version
+
+logger = logging.getLogger(__name__)
 
 # Mapping of module name and the name of the package that should be installed
 INSTALL_MAPPING = {"IPython": "ipython"}
@@ -1469,6 +1472,6 @@ if __name__ == "__main__":  # pragma: no cover
 
     res = doctest.testmod()
     if res.failed < 1:
-        print(f"All the {res.attempted} tests passed!")
+        logger.info("All the %d tests passed!", res.attempted)
     else:
-        print(f"{res.failed} out of {res.attempted} tests failed.")
+        logger.error("%d out of %d tests failed.", res.failed, res.attempted)

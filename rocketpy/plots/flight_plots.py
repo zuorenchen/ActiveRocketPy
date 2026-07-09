@@ -1,9 +1,16 @@
+import logging
+import os
+import time
 from functools import cached_property
+from importlib import resources
 
 import matplotlib.pyplot as plt
 import numpy as np
 
+from ..tools import import_optional_dependency
 from .plot_helpers import show_or_save_plot
+
+logger = logging.getLogger(__name__)
 
 
 class _FlightPlots:
@@ -132,6 +139,278 @@ class _FlightPlots:
         ax1.view_init(15, 45)
         ax1.set_box_aspect(None, zoom=0.95)  # 95% for label adjustment
         show_or_save_plot(filename)
+
+    def _resolve_animation_model_path(self, file_name):
+        """Resolve model path, defaulting to the built-in STL when omitted."""
+        if file_name is not None:
+            return file_name
+
+        return str(
+            resources.files("rocketpy.plots").joinpath("assets/default_rocket.stl")
+        )
+
+    def _validate_animation_inputs(self, file_name, start, stop, time_step):
+        """Validate shared input parameters for 3D animation methods."""
+        if time_step <= 0:
+            raise ValueError(
+                f"Invalid time_step: {time_step}. It must be greater than 0."
+            )
+
+        if stop is None:
+            stop = self.flight.t_final
+
+        if (
+            start < 0
+            or stop < 0
+            or start > self.flight.t_final
+            or stop > self.flight.t_final
+            or start >= stop
+        ):
+            raise ValueError(
+                f"Invalid animation time range: start={start}, stop={stop}. "
+                f"Both must be within [0, {self.flight.t_final}] and start < stop."
+            )
+
+        if not os.path.isfile(file_name):
+            raise FileNotFoundError(
+                f"Could not find the 3D model file: '{file_name}'. "
+                "Provide a valid .stl file path."
+            )
+
+        return stop
+
+    @staticmethod
+    def _rotation_from_quaternion(q0, q1, q2, q3):
+        """Convert unit quaternion to axis-angle representation in degrees."""
+        norm = np.sqrt(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3)
+        if norm == 0:
+            return 0.0, (1.0, 0.0, 0.0)
+
+        q0 = q0 / norm
+        q1 = q1 / norm
+        q2 = q2 / norm
+        q3 = q3 / norm
+
+        # q and -q represent the same orientation. Keep q0 non-negative to
+        # reduce discontinuities in axis-angle interpolation across frames.
+        if q0 < 0:
+            q0 = -q0
+            q1 = -q1
+            q2 = -q2
+            q3 = -q3
+
+        q0 = np.clip(q0, -1.0, 1.0)
+        angle = 2 * np.arccos(q0)
+        sin_half = np.sqrt(max(1 - q0 * q0, 0.0))
+
+        if sin_half < 1e-12:
+            return 0.0, (1.0, 0.0, 0.0)
+
+        axis = (q1 / sin_half, q2 / sin_half, q3 / sin_half)
+        return np.degrees(angle), axis
+
+    def _create_animation_box(self, start, scale=1.0):
+        """Create a world box with minimum visible dimensions."""
+        min_box_dim = 10.0
+        x_values = self.flight.x[:, 1]
+        y_values = self.flight.y[:, 1]
+        z_values = self.flight.z[:, 1] - self.flight.env.elevation
+
+        center_x = 0.5 * (np.max(x_values) + np.min(x_values))
+        center_y = 0.5 * (np.max(y_values) + np.min(y_values))
+        center_z = max(self.flight.z(start) - self.flight.env.elevation, 0.0)
+
+        length = max(np.ptp(x_values) * scale, min_box_dim)
+        width = max(np.ptp(y_values) * scale, min_box_dim)
+        height = max(np.ptp(z_values) * scale, min_box_dim)
+
+        # Keep z center inside visible space while preserving minimum box size.
+        center_z = max(center_z, 0.5 * min_box_dim)
+
+        vedo = import_optional_dependency("vedo")
+
+        return vedo.Box(
+            pos=[center_x, center_y, center_z],
+            length=length,
+            width=width,
+            height=height,
+        ).wireframe()
+
+    @staticmethod
+    def _require_interactive_vedo_backend(vedo):
+        """Ensure vedo can open an interactive VTK window for the animation.
+
+        The animations drive an interactive render loop, which needs a desktop
+        window. In Jupyter/headless environments vedo defaults to the ``"2d"``
+        backend, where every ``render()`` call fails with the cryptic
+        ``"No active Plotter found for the 2d backend"``. Fail early with a
+        clear, actionable message instead.
+        """
+        if getattr(vedo.settings, "default_backend", None) == "2d":
+            raise RuntimeError(
+                "Rocket animations require an interactive VTK window, which is "
+                "not available with vedo's '2d' backend (the default inside "
+                "Jupyter notebooks and headless environments). Run this from a "
+                "Python script, or switch vedo to a desktop backend before "
+                "calling it:\n"
+                "    import vedo\n"
+                "    vedo.settings.default_backend = 'vtk'"
+            )
+
+    def animate_trajectory(  # pylint: disable=too-many-statements
+        self, file_name=None, start=0, stop=None, time_step=0.1, **kwargs
+    ):
+        """Animate 6-DOF trajectory and attitude using vedo.
+
+        Parameters
+        ----------
+        file_name : str | None, optional
+            Path to a 3D model file representing the rocket, usually ``.stl``.
+            If None, RocketPy uses a built-in default STL model.
+            Default is None.
+        start : int, float, optional
+            Animation start time in seconds. Default is 0.
+        stop : int, float | None, optional
+            Animation end time in seconds. If None, uses ``flight.t_final``.
+            Default is None.
+        time_step : float, optional
+            Animation frame step in seconds. Must be greater than 0.
+            Default is 0.1.
+        **kwargs : dict, optional
+            Additional keyword arguments passed to ``vedo.Plotter.show``.
+        """
+
+        vedo = import_optional_dependency("vedo")
+        self._require_interactive_vedo_backend(vedo)
+
+        file_name = self._resolve_animation_model_path(file_name)
+        stop = self._validate_animation_inputs(file_name, start, stop, time_step)
+
+        try:
+            vedo.settings.allow_interaction = True
+        except AttributeError:
+            pass
+
+        world = self._create_animation_box(start, scale=1.2)
+        base_rocket = vedo.Mesh(file_name).c("green")
+        time_steps = np.arange(start, stop, time_step)
+        trajectory_points = []
+
+        plt = vedo.Plotter(axes=1, interactive=False)
+        plt.show(world, "Rocket Trajectory Animation", viewup="z", **kwargs)
+
+        for t in time_steps:
+            rocket = base_rocket.clone()
+            x_position = self.flight.x(t)
+            y_position = self.flight.y(t)
+            z_position = self.flight.z(t) - self.flight.env.elevation
+
+            angle_deg, axis = self._rotation_from_quaternion(
+                self.flight.e0(t),
+                self.flight.e1(t),
+                self.flight.e2(t),
+                self.flight.e3(t),
+            )
+
+            rocket.pos(x_position, y_position, z_position)
+            if angle_deg != 0.0:
+                # Rotate about the rocket's placed position. vedo's rotate()
+                # rotates about the world origin by default, which would map the
+                # model to R @ pos and displace it from its trajectory point.
+                rocket.rotate(
+                    angle_deg,
+                    axis=axis,
+                    point=(x_position, y_position, z_position),
+                )
+
+            trajectory_points.append([x_position, y_position, z_position])
+            actors = [world, rocket]
+            if len(trajectory_points) > 1:
+                actors.append(vedo.Line(trajectory_points, c="k", alpha=0.5))
+
+            plt.show(*actors, resetcam=False)
+
+            start_pause = time.time()
+            while time.time() - start_pause < time_step:
+                plt.render()
+                time.sleep(0.001)  # yield the CPU instead of busy-spinning
+
+            if getattr(plt, "escaped", False):
+                break
+
+        plt.interactive().close()
+
+    def animate_rotate(  # pylint: disable=too-many-statements
+        self, file_name=None, start=0, stop=None, time_step=0.1, **kwargs
+    ):
+        """Animate rocket attitude (rotation-only view) using vedo.
+
+        Parameters
+        ----------
+        file_name : str | None, optional
+            Path to a 3D model file representing the rocket, usually ``.stl``.
+            If None, RocketPy uses a built-in default STL model.
+            Default is None.
+        start : int, float, optional
+            Animation start time in seconds. Default is 0.
+        stop : int, float | None, optional
+            Animation end time in seconds. If None, uses ``flight.t_final``.
+            Default is None.
+        time_step : float, optional
+            Animation frame step in seconds. Must be greater than 0.
+            Default is 0.1.
+        **kwargs : dict, optional
+            Additional keyword arguments passed to ``vedo.Plotter.show``.
+        """
+
+        vedo = import_optional_dependency("vedo")
+        self._require_interactive_vedo_backend(vedo)
+
+        file_name = self._resolve_animation_model_path(file_name)
+        stop = self._validate_animation_inputs(file_name, start, stop, time_step)
+
+        try:
+            vedo.settings.allow_interaction = True
+        except AttributeError:
+            pass
+
+        world = self._create_animation_box(start, scale=0.3)
+        base_rocket = vedo.Mesh(file_name).c("green")
+        time_steps = np.arange(start, stop, time_step)
+
+        x_start = self.flight.x(start)
+        y_start = self.flight.y(start)
+        z_start = self.flight.z(start) - self.flight.env.elevation
+
+        plt = vedo.Plotter(axes=1, interactive=False)
+        plt.show(world, "Rocket Rotation Animation", viewup="z", **kwargs)
+
+        for t in time_steps:
+            rocket = base_rocket.clone()
+            angle_deg, axis = self._rotation_from_quaternion(
+                self.flight.e0(t),
+                self.flight.e1(t),
+                self.flight.e2(t),
+                self.flight.e3(t),
+            )
+
+            rocket.pos(x_start, y_start, z_start)
+            if angle_deg != 0.0:
+                # Rotate about the rocket's placed position (vedo rotates about
+                # the world origin by default, which would displace the model).
+                rocket.rotate(angle_deg, axis=axis, point=(x_start, y_start, z_start))
+
+            plt.show(world, rocket, resetcam=False)
+
+            start_pause = time.time()
+            while time.time() - start_pause < time_step:
+                plt.render()
+                time.sleep(0.001)  # yield the CPU instead of busy-spinning
+
+            if getattr(plt, "escaped", False):
+                break
+
+        plt.interactive().close()
 
     def linear_kinematics_data(self, *, filename=None):  # pylint: disable=too-many-statements
         """Prints out all Kinematics graphs available about the Flight
@@ -411,16 +690,20 @@ class _FlightPlots:
         None
         """
         if len(self.flight.rocket.rail_buttons) == 0:
-            print(
+            logger.warning(
                 "No rail buttons were defined. Skipping rail button bending moment plots."
             )
         elif self.flight.out_of_rail_time_index == 0:
-            print("No rail phase was found. Skipping rail button bending moment plots.")
+            logger.warning(
+                "No rail phase was found. Skipping rail button bending moment plots."
+            )
         else:
             # Check if button_height is defined
             rail_buttons_tuple = self.flight.rocket.rail_buttons[0]
             if rail_buttons_tuple.component.button_height is None:
-                print("Rail button height not defined. Skipping bending moment plots.")
+                logger.warning(
+                    "Rail button height not defined. Skipping bending moment plots."
+                )
             else:
                 plt.figure(figsize=(9, 3))
 
@@ -475,9 +758,9 @@ class _FlightPlots:
         None
         """
         if len(self.flight.rocket.rail_buttons) == 0:
-            print("No rail buttons were defined. Skipping rail button plots.")
+            logger.warning("No rail buttons were defined. Skipping rail button plots.")
         elif self.flight.out_of_rail_time_index == 0:
-            print("No rail phase was found. Skipping rail button plots.")
+            logger.warning("No rail phase was found. Skipping rail button plots.")
         else:
             plt.figure(figsize=(9, 6))
 
@@ -771,6 +1054,18 @@ class _FlightPlots:
         plt.subplots_adjust(hspace=1)
         show_or_save_plot(filename)
 
+    @staticmethod
+    def __signed_angle_ylim(angle_function, t_start, t_end, margin=5):
+        """Return ``(ymin, ymax)`` limits for a signed angle plotted between
+        ``t_start`` and ``t_end``. The range is based only on the samples inside
+        that time window so the full (positive and negative) oscillation is
+        visible, unlike a fixed floor at zero which would clip it.
+        """
+        data = angle_function[:, :]
+        mask = (data[:, 0] >= t_start) & (data[:, 0] <= t_end)
+        values = data[mask, 1] if np.any(mask) else data[:, 1]
+        return values.min() - margin, values.max() + margin
+
     def fluid_mechanics_data(self, *, filename=None):  # pylint: disable=too-many-statements
         """Prints out a summary of the Fluid Mechanics graphs available about
         the Flight
@@ -848,8 +1143,15 @@ class _FlightPlots:
         ax5.set_xlabel("Time (s)")
         ax5.set_ylabel("Partial Angle of Attack (°)")
         ax5.set_xlim(self.flight.out_of_rail_time, self.first_event_time)
+        # Partial angle of attack is a signed angle oscillating around zero, so
+        # scale to the data in the plotted window instead of flooring at 0
+        # (which would clip the negative half of the oscillation).
         ax5.set_ylim(
-            0, self.flight.partial_angle_of_attack(self.flight.out_of_rail_time) + 15
+            *self.__signed_angle_ylim(
+                self.flight.partial_angle_of_attack,
+                self.flight.out_of_rail_time,
+                self.first_event_time,
+            )
         )
         ax5.grid()
 
@@ -861,8 +1163,13 @@ class _FlightPlots:
         ax6.set_xlabel("Time (s)")
         ax6.set_ylabel("Angle of Sideslip (°)")
         ax6.set_xlim(self.flight.out_of_rail_time, self.first_event_time)
+        # Sideslip is also signed; keep the full oscillation visible.
         ax6.set_ylim(
-            0, self.flight.angle_of_sideslip(self.flight.out_of_rail_time) + 15
+            *self.__signed_angle_ylim(
+                self.flight.angle_of_sideslip,
+                self.flight.out_of_rail_time,
+                self.first_event_time,
+            )
         )
         ax6.grid()
 
@@ -1002,14 +1309,113 @@ class _FlightPlots:
         None
         """
 
-        if len(self.flight.parachute_events) > 0:
-            for parachute in self.flight.rocket.parachutes:
-                print("\nParachute: ", parachute.name)
-                parachute.noise_signal_function()
-                parachute.noisy_pressure_signal_function()
-                parachute.clean_pressure_signal_function()
+        if len(self.flight.parachute_events) == 0:
+            logger.warning("Rocket has no parachutes. No parachute plots available.")
+            return
+
+        for parachute in self.flight.rocket.parachutes:
+            clean = parachute.clean_pressure_signal_function
+            noisy = parachute.noisy_pressure_signal_function
+            # Nothing was recorded (e.g. parachute never triggered)
+            if not isinstance(clean.source, np.ndarray) or clean.source.ndim != 2:
+                continue
+            time_signal = clean.source[:, 0]
+
+            plt.figure(figsize=(9, 4))
+            plt.plot(
+                time_signal, clean(time_signal), label="Without noise", linewidth=1.5
+            )
+            plt.plot(
+                time_signal,
+                noisy(time_signal),
+                label="With noise",
+                alpha=0.7,
+                linewidth=0.8,
+            )
+            plt.title(f"Parachute trigger pressure signal: {parachute.name}")
+            plt.xlabel("Time (s)")
+            plt.ylabel("Pressure (Pa)")
+            plt.legend()
+            plt.grid(True)
+            show_or_save_plot()
+
+    def parachutes_info(self, parachute_name="all"):
+        """Plots parachute dynamic information.
+        This function plots the dynamic relevant information to each parachute.
+        Different parachute models have different dynamic variables. It is
+        assumed that the 'parachutes_info' members have the dynamic variables
+        together with their respective time
+
+        Parameters
+        ----------
+        parachute_name : str | optional
+            The parachute name to display information. Default is 'all', in
+            which case information about all parachutes are plotted.
+
+        Returns
+        -------
+        None
+        """
+        # Parachute dynamic information (e.g. drag) is saved during
+        # post-processing, which is evaluated lazily. Accessing a post-processed
+        # variable forces it to run, so this plot works even when called before
+        # any other post-processed variable has been accessed.
+        _ = self.flight.ax
+
+        if not getattr(self.flight, "parachutes_info", None):
+            print("\nFlight has no parachute dynamic information available.")
+            return
+
+        if parachute_name == "all":
+            items = list(self.flight.parachutes_info.items())
+        elif parachute_name in self.flight.parachutes_info:
+            items = [(parachute_name, self.flight.parachutes_info[parachute_name])]
         else:
-            print("\nRocket has no parachutes. No parachute plots available")
+            print(
+                f"\nNo dynamic information available for parachute "
+                f"'{parachute_name}'. It may not have been deployed during the "
+                f"flight. Available parachutes: "
+                f"{list(self.flight.parachutes_info.keys())}."
+            )
+            return
+
+        # Gather every dynamic variable across the selected parachutes so each
+        # one is drawn on a single figure with all parachutes overlaid.
+        variables = []
+        for _, parachute_variables in items:
+            for variable in parachute_variables:
+                if variable != "t" and variable not in variables:
+                    variables.append(variable)
+
+        for variable in variables:
+            self.__plot_parachute_variable(variable, items)
+
+    # Axis label (and unit) for each known parachute dynamic variable.
+    __parachute_variable_labels = {"drag": ("Drag Force", "N")}
+
+    def __plot_parachute_variable(self, variable, items):
+        """Plot a single parachute dynamic variable (e.g. drag) for every
+        parachute in ``items`` overlaid on one figure, one colour each."""
+        label, unit = self.__parachute_variable_labels.get(
+            variable, (variable.replace("_", " ").title(), "")
+        )
+        ylabel = f"{label} ({unit})" if unit else label
+
+        plt.figure(figsize=(9, 4))
+        for name, parachute_variables in items:
+            if variable not in parachute_variables:
+                continue
+            plt.plot(
+                parachute_variables["t"],
+                parachute_variables[variable],
+                label=name,
+            )
+        plt.title(f"Parachute {label} vs Time")
+        plt.xlabel("Time (s)")
+        plt.ylabel(ylabel)
+        plt.legend()
+        plt.grid(True)
+        show_or_save_plot()
 
     def all(self):  # pylint: disable=too-many-statements
         """Prints out all plots available about the Flight.
@@ -1028,7 +1434,7 @@ class _FlightPlots:
         print("\n\nAngular Position Plots\n")
         self.flight_path_angle_data()
 
-        print("\n\nPath, Attitude and Lateral Attitude Angle plots\n")
+        print("\n\nPath, Attitude and Lateral Attitude Angle Plots\n")
         self.attitude_data()
 
         print("\n\nTrajectory Angular Velocity and Acceleration Plots\n")
@@ -1055,3 +1461,4 @@ class _FlightPlots:
         print("\n\nRocket and Parachute Pressure Plots\n")
         self.pressure_rocket_altitude()
         self.pressure_signals()
+        self.parachutes_info()

@@ -1,6 +1,7 @@
 # pylint: disable=too-many-public-methods, too-many-instance-attributes
 import bisect
 import json
+import logging
 import re
 import warnings
 from collections import namedtuple
@@ -11,10 +12,12 @@ import numpy as np
 import pytz
 
 from rocketpy.environment.fetchers import (
+    fetch_aigfs_file_return_dataset,
     fetch_atmospheric_data_from_windy,
     fetch_gefs_ensemble,
     fetch_gfs_file_return_dataset,
     fetch_hiresw_file_return_dataset,
+    fetch_hrrr_file_return_dataset,
     fetch_nam_file_return_dataset,
     fetch_open_elevation,
     fetch_rap_file_return_dataset,
@@ -44,6 +47,8 @@ from rocketpy.tools import (
     bilinear_interpolation,
     geopotential_height_to_geometric_height,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class Environment:
@@ -369,9 +374,11 @@ class Environment:
         self.__weather_model_map = WeatherModelMapping()
         self.__atm_type_file_to_function_map = {
             "forecast": {
+                "AIGFS": fetch_aigfs_file_return_dataset,
                 "GFS": fetch_gfs_file_return_dataset,
                 "NAM": fetch_nam_file_return_dataset,
                 "RAP": fetch_rap_file_return_dataset,
+                "HRRR": fetch_hrrr_file_return_dataset,
                 "HIRESW": fetch_hiresw_file_return_dataset,
             },
             "ensemble": {
@@ -533,20 +540,42 @@ class Environment:
             interpolation="linear",
         )
 
+    def __set_wind_angle_function(self, source, attribute, output):
+        """Set ``attribute`` (e.g. ``wind_direction``) as a Function of height.
+        For 2D-array sources the angles are unwrapped across the 360/0 boundary
+        before linear interpolation, avoiding spurious spikes near the wrap."""
+        if isinstance(source, (np.ndarray, list, tuple)) and np.ndim(source) == 2:
+            array = np.asarray(source)
+            unwrapped_deg = np.rad2deg(np.unwrap(np.deg2rad(array[:, 1])))
+            unwrapped = Function(
+                np.column_stack((array[:, 0], unwrapped_deg)),
+                inputs="Height Above Sea Level (m)",
+                outputs=output,
+                interpolation="linear",
+            )
+            setattr(self, f"{attribute}_unwrapped", unwrapped)
+            source = Function(
+                lambda h: unwrapped(h) % 360,
+                inputs="Height Above Sea Level (m)",
+                outputs=output,
+            )
+        else:
+            source = Function(
+                source,
+                inputs="Height Above Sea Level (m)",
+                outputs=output,
+                interpolation="linear",
+            )
+        setattr(self, attribute, source)
+
     def __set_wind_direction_function(self, source):
-        self.wind_direction = Function(
-            source,
-            inputs="Height Above Sea Level (m)",
-            outputs="Wind Direction (Deg True)",
-            interpolation="linear",
+        self.__set_wind_angle_function(
+            source, "wind_direction", "Wind Direction (Deg True)"
         )
 
     def __set_wind_heading_function(self, source):
-        self.wind_heading = Function(
-            source,
-            inputs="Height Above Sea Level (m)",
-            outputs="Wind Heading (Deg True)",
-            interpolation="linear",
+        self.__set_wind_angle_function(
+            source, "wind_heading", "Wind Heading (Deg True)"
         )
 
     def __reset_barometric_height_function(self):
@@ -665,12 +694,13 @@ class Environment:
     def __validate_dictionary(self, file, dictionary):
         # removed CMC until it is fixed.
         available_models = [
+            "AIGFS",
             "GFS",
             "NAM",
             "RAP",
+            "HRRR",
             "HIRESW",
             "GEFS",
-            "ERA5",
             "MERRA2",
         ]
         if isinstance(dictionary, str):
@@ -971,7 +1001,7 @@ class Environment:
             self.elevation = elevation
         else:
             self.elevation = fetch_open_elevation(self.latitude, self.longitude)
-            print(f"Elevation received: {self.elevation} m")
+            logger.info("Elevation received: %.2f m", self.elevation)
 
     def set_topographic_profile(  # pylint: disable=redefined-builtin, unused-argument
         self, type, file, dictionary="netCDF4", crs=None
@@ -1010,14 +1040,13 @@ class Environment:
                 # crsArray = nasa_dem.variables['crs'][:].tolist().
                 self.topographic_profile_activated = True
 
-                print("Region covered by the Topographical file: ")
-                print(
-                    f"Latitude from {self.elev_lat_array[-1]:.6f}° to "
-                    f"{self.elev_lat_array[0]:.6f}°"
-                )
-                print(
-                    f"Longitude from {self.elev_lon_array[0]:.6f}° to "
-                    f"{self.elev_lon_array[-1]:.6f}°"
+                logger.debug(
+                    "Topographical file coverage: lat [%.6f°, %.6f°], "
+                    "lon [%.6f°, %.6f°]",
+                    self.elev_lat_array[-1],
+                    self.elev_lat_array[0],
+                    self.elev_lon_array[0],
+                    self.elev_lon_array[-1],
                 )
 
     def get_elevation_from_topographic_profile(self, lat, lon):
@@ -1105,6 +1134,51 @@ class Environment:
 
         return elevation
 
+    def __determine_pressure_conversion_factor(
+        self, pressure_conversion_factor, input_dict, input_file
+    ):
+        """Determine the numeric conversion factor (pressure -> Pa) based on
+        either the user's explicit input or auto-detection.
+
+        Parameters
+        ----------
+        pressure_conversion_factor : string, int, float or None
+            The user-supplied pressure conversion factor.
+        input_dict : string or None
+            The upper-case string name of the dictionary.
+        input_file : string or None
+            The upper-case string name of the file/model shortcut.
+
+        Returns
+        -------
+        conversion_factor : float, int or None
+            The numeric conversion factor to Pascal, or None if it needs to be
+            read from the file's units attribute.
+        """
+        if pressure_conversion_factor is not None:
+            # User explicitly supplied a value — honour it.
+            if isinstance(pressure_conversion_factor, str):
+                return (
+                    100 if pressure_conversion_factor.lower() in ("mbar", "hpa") else 1
+                )
+            return pressure_conversion_factor
+
+        # Auto-detect. Primary source: known-model lookup table.
+        # Fallback: units attribute inside the file.
+        # THREDDS (UCAR) models expose pressure on the 'isobaric' coordinate in
+        # Pa; NOMADS-GrADS models (GEFS, HIRESW) expose it on the 'lev'
+        # coordinate in hPa/millibars and must be scaled by 100.
+        _hpa_dicts = {"ECMWF", "ECMWF_V0", "MERRA2"}
+        _hpa_files = {"GEFS", "HIRESW"}
+        _pa_files = {"GFS", "NAM", "RAP", "HRRR", "AIGFS"}
+        if input_dict in _hpa_dicts or input_file in _hpa_dicts:
+            return 100
+        if input_file in _hpa_files:
+            return 100
+        if input_file in _pa_files:
+            return 1
+        return None
+
     def set_atmospheric_model(  # pylint: disable=too-many-statements
         self,
         type,  # pylint: disable=redefined-builtin
@@ -1114,6 +1188,7 @@ class Environment:
         temperature=None,
         wind_u=0,
         wind_v=0,
+        pressure_conversion_factor=None,
     ):
         """Define the atmospheric model for this Environment.
 
@@ -1132,40 +1207,38 @@ class Environment:
             - ``"windy"``: one of ``"ECMWF"``, ``"GFS"``, ``"ICON"`` or
               ``"ICONEU"``.
             - ``"forecast"``: local path, OPeNDAP URL, open
-              ``netCDF4.Dataset``, or one of ``"GFS"``, ``"NAM"`` or ``"RAP"``
-              for the latest available forecast.
+              ``netCDF4.Dataset``, or one of ``"AIGFS"``, ``"GFS"``,
+              ``"NAM"``, ``"RAP"``, ``"HRRR"`` or ``"HIRESW"`` for the
+              latest available forecast.
             - ``"reanalysis"``: local path, OPeNDAP URL, or open
               ``netCDF4.Dataset``.
             - ``"ensemble"``: local path, OPeNDAP URL, open
               ``netCDF4.Dataset``, or ``"GEFS"`` for the latest available
               forecast.
         dictionary : dict | str, optional
-            Variable-name mapping for ``"forecast"``, ``"reanalysis"`` and
-            ``"ensemble"``. It may be a custom dictionary or a built-in
-            mapping name (for example: ``"ECMWF"``, ``"ECMWF_v0"``,
-            ``"NOAA"``, ``"GFS"``, ``"NAM"``, ``"RAP"``, ``"HIRESW"``,
-            ``"GEFS"``, ``"MERRA2"`` or ``"CMC"``).
+            A dictionary mapping variables in the netCDF4 file to standard
+            names. Meaning depends on ``type``:
 
-            If ``dictionary`` is omitted and ``file`` is one of RocketPy's
-            latest-model shortcuts, the matching built-in mapping is selected
-            automatically. For ensemble datasets, the mapping must include the
-            ensemble dimension key (typically ``"ensemble"``).
-
+            - ``"standard_atmosphere"``, ``"custom_atmosphere"`` and
+              ``"wyoming_sounding"``: ignored.
+            - ``"windy"``: ignored.
+            - ``"forecast"``, ``"reanalysis"`` and ``"ensemble"``: local
+              dictionary, or one of the built-in mappings (e.g. ``"ECMWF"``,
+              ``"GFS"``, ``"MERRA2"``, ``"RAP"``, ``"HRRR"``, etc.) corresponding
+              to the file structure.
         pressure : float, string, array, callable, optional
-            This defines the atmospheric pressure profile.
-            Should be given if the type parameter is ``custom_atmosphere``. If not,
-            than the the ``Standard Atmosphere`` pressure will be used.
-            If a float is given, it will define a constant pressure
-            profile. The float should be in units of Pa.
-            If a string is given, it should point to a `.CSV` file
-            containing at most one header line and two columns of data.
-            The first column must be the geometric height above sea level in
-            meters while the second column must be the pressure in Pa.
-            If an array is given, it is expected to be a list or array
-            of coordinates (height in meters, pressure in Pa).
-            Finally, a callable or function is also accepted. The
-            function should take one argument, the height above sea
-            level in meters and return a corresponding pressure in Pa.
+            This defines the atmospheric pressure profile. Should be given if
+            the type parameter is ``custom_atmosphere``. If not, than the the
+            ``Standard Atmosphere`` pressure will be used. If a float is given,
+            it will define a constant pressure profile. The float should be in
+            units of Pa. If a string is given, it should point to a `.CSV` file
+            containing at most one header line and two columns of data. The first
+            column must be the geometric height above sea level in meters while
+            the second column must be the pressure in Pa. If an array is given,
+            it is expected to be a list or array of coordinates (height in
+            meters, pressure in Pa). Finally, a callable or function is also
+            accepted. The function should take one argument, the height above
+            sea level in meters and return a corresponding pressure in Pa.
         temperature : float, string, array, callable, optional
             This defines the atmospheric temperature profile. Should be given
             if the type parameter is ``custom_atmosphere``. If not, than the the
@@ -1208,6 +1281,16 @@ class Environment:
             m/s). Finally, a callable or function is also accepted. The function
             should take one argument, the height above sea level in meters and
             return a corresponding wind-v in m/s.
+        pressure_conversion_factor : string, int, float, optional
+            This defines the pressure conversion factor to Pa when type is
+            ``forecast``, ``reanalysis``, or ``ensemble``. The pressure unit
+            from the data may not be in Pascal, so the correction is necessary.
+            Valid strings are ``"mbar"``, ``"hPa"``, or ``"Pa"``, or a strictly
+            positive number if using a custom pressure unit. If None (the default),
+            the conversion factor will be automatically detected based on the
+            model name (e.g. ERA5/ECMWF/MERRA2 reanalysis files commonly use hPa,
+            while online GFS/NAM/RAP/HRRR forecast models use Pa) or, if
+            unavailable, by reading the pressure unit attribute from the file.
 
         Returns
         -------
@@ -1257,6 +1340,35 @@ class Environment:
             case "windy":
                 self.process_windy_atmosphere(file)
             case "forecast" | "reanalysis" | "ensemble":
+                # Capture the user-supplied names before __validate_dictionary
+                # converts them to dicts, so they can drive auto-detection.
+                _input_dict = (
+                    dictionary.upper() if isinstance(dictionary, str) else None
+                )
+                _input_file = file.upper() if isinstance(file, str) else None
+
+                # Validate format of user-supplied value (if any).
+                # When None, auto-detection runs after dictionary resolution.
+                if pressure_conversion_factor is not None:
+                    if not isinstance(pressure_conversion_factor, (float, int, str)):
+                        raise ValueError(
+                            "Argument 'pressure_conversion_factor' must be numeric or a standard pressure unit ('mbar', 'hPa', 'Pa')!"
+                        )
+                    if isinstance(pressure_conversion_factor, (float, int)):
+                        if pressure_conversion_factor <= 0:
+                            raise ValueError(
+                                "Argument 'pressure_conversion_factor' must be strictly positive!"
+                            )
+                    if isinstance(pressure_conversion_factor, str):
+                        if pressure_conversion_factor.lower() not in (
+                            "mbar",
+                            "hpa",
+                            "pa",
+                        ):
+                            raise ValueError(
+                                "Argument 'pressure_conversion_factor' unit must be a standard pressure unit ('mbar', 'hPa', 'Pa')!"
+                            )
+
                 if isinstance(file, str):
                     shortcut_map = self.__atm_type_file_to_function_map.get(type, {})
                     matching_shortcut = next(
@@ -1288,6 +1400,12 @@ class Environment:
                         )
 
                 dictionary = self.__validate_dictionary(file, dictionary)
+
+                # Determine the numeric conversion factor (pressure → Pa).
+                conversion_factor = self.__determine_pressure_conversion_factor(
+                    pressure_conversion_factor, _input_dict, _input_file
+                )
+
                 try:
                     fetch_function = self.__atm_type_file_to_function_map[type][file]
                 except KeyError:
@@ -1297,9 +1415,35 @@ class Environment:
                 dataset = fetch_function() if fetch_function is not None else file
 
                 if type in ["forecast", "reanalysis"]:
-                    self.process_forecast_reanalysis(dataset, dictionary)
+                    self.process_forecast_reanalysis(
+                        dataset, dictionary, conversion_factor=conversion_factor
+                    )
                 else:
-                    self.process_ensemble(dataset, dictionary)
+                    self.process_ensemble(dataset, dictionary, conversion_factor)
+
+                ground_pressure = self.pressure(self.elevation)
+                if not 30000 <= ground_pressure <= 120_000:
+                    if pressure_conversion_factor is None:
+                        hint = (
+                            "The unit was auto-detected from the file's pressure "
+                            "level variable or model name, but the result is still out of range. "
+                            "Override by passing pressure_conversion_factor explicitly "
+                            "('hPa' for ERA5/ECMWF/MERRA2 files, 'Pa' for online "
+                            "forecast models such as GFS, NAM, RAP, HRRR)."
+                        )
+                    else:
+                        hint = (
+                            f"pressure_conversion_factor='{pressure_conversion_factor}' "
+                            f"may be wrong. ERA5/ECMWF/MERRA2 reanalysis files store pressure "
+                            f"in hPa — use 'hPa'. Online forecast models "
+                            f"(GFS, NAM, RAP, HRRR) store pressure in Pa — use 'Pa'."
+                        )
+                    warnings.warn(
+                        f"Ground-level pressure is {ground_pressure:.0f} Pa, which is "
+                        f"outside the expected range [30 000 Pa, 120 000 Pa]. {hint}",
+                        UserWarning,
+                        stacklevel=2,
+                    )
             case _:  # pragma: no cover
                 raise ValueError(f"Unknown model type '{type}'.")
 
@@ -1610,11 +1754,11 @@ class Environment:
 
             Example:
 
-            http://weather.uwyo.edu/cgi-bin/sounding?region=samer&TYPE=TEXT%3ALIST&YEAR=2019&MONTH=02&FROM=0200&TO=0200&STNM=82599
+            https://weather.uwyo.edu/wsgi/sounding?datetime=2019-02-05%2012:00:00&id=83779&type=TEXT:LIST
 
         Notes
         -----
-        More can be found at: http://weather.uwyo.edu/upperair/sounding.html.
+        More can be found at: https://weather.uwyo.edu/upperair/sounding.shtml.
 
         Returns
         -------
@@ -1626,7 +1770,9 @@ class Environment:
         # Process Wyoming Sounding by finding data table and station info
         response_split_text = re.split("(<.{0,1}PRE>)", response.text)
         data_table = response_split_text[2]
-        station_info = response_split_text[6]
+        # Legacy CGI pages had extra <PRE> blocks with station information;
+        # current WSGI pages have a single block with the data table only.
+        station_info = response_split_text[6] if len(response_split_text) > 6 else None
 
         # Transform data table into np array
         data_array = []
@@ -1648,8 +1794,10 @@ class Environment:
         self.__set_temperature_function(data_array[:, (1, 2)])
 
         # Retrieve wind-u and wind-v from data array
-        ## Converts Knots to m/s
-        data_array[:, 7] = data_array[:, 7] * 1.852 / 3.6
+        ## Legacy pages report wind speed as SKNT (knots); current WSGI pages
+        ## report it as SPED (m/s) and need no conversion.
+        if "SKNT" in data_table.split("\n")[2]:
+            data_array[:, 7] = data_array[:, 7] * 1.852 / 3.6  # Knots to m/s
         ## Convert wind direction to wind heading
         data_array[:, 5] = (data_array[:, 6] + 180) % 360
         data_array[:, 3] = data_array[:, 7] * np.sin(data_array[:, 5] * np.pi / 180)
@@ -1667,18 +1815,21 @@ class Environment:
         self.__set_wind_direction_function(data_array[:, (1, 6)])
         self.__set_wind_speed_function(data_array[:, (1, 7)])
 
-        # Retrieve station elevation from station info
-        station_elevation_text = station_info.split("\n")[6]
-
-        # Convert station elevation text into float value
-        self.elevation = float(
-            re.findall(r"[0-9]+\.[0-9]+|[0-9]+", station_elevation_text)[0]
-        )
+        # Retrieve station elevation
+        if station_info is not None:
+            # Legacy pages: read it from the station information block
+            station_elevation_text = station_info.split("\n")[6]
+            self.elevation = float(
+                re.findall(r"[0-9]+\.[0-9]+|[0-9]+", station_elevation_text)[0]
+            )
+        else:
+            # Current WSGI pages: use the surface (first) level height
+            self.elevation = float(data_array[0, 1])
 
         # Save maximum expected height
         self._max_expected_height = data_array[-1, 1]
 
-    def process_forecast_reanalysis(self, file, dictionary):  # pylint: disable=too-many-locals,too-many-statements
+    def process_forecast_reanalysis(self, file, dictionary, conversion_factor):  # pylint: disable=too-many-locals,too-many-statements
         """Import and process atmospheric data from weather forecasts
         and reanalysis given as ``netCDF`` or ``OPeNDAP`` files.
         Sets pressure, temperature, wind-u and wind-v
@@ -1730,6 +1881,9 @@ class Environment:
                     "u_wind": "ugrdprs",
                     "v_wind": "vgrdprs",
                 }
+        conversion_factor : float, int
+            Specifies the factor by which the pressure will be multiplied
+            in order to transform it to Pascal.
 
         Returns
         -------
@@ -1761,13 +1915,17 @@ class Environment:
         # Some THREDDS datasets use projected x/y coordinates.
         if dictionary.get("projection") is not None:
             projection_variable = data.variables[dictionary["projection"]]
-            x_units = getattr(lon_array, "units", "m")
-            target_lon, target_lat = geodesic_to_lambert_conformal(
-                self.latitude,
-                self.longitude,
-                projection_variable,
-                x_units=x_units,
-            )
+            if dictionary.get("projection") == "LambertConformal_Projection":
+                x_units = getattr(lon_array, "units", "m")
+                target_lon, target_lat = geodesic_to_lambert_conformal(
+                    self.latitude,
+                    self.longitude,
+                    projection_variable,
+                    x_units=x_units,
+                )
+            else:
+                target_lon = self.longitude
+                target_lat = self.latitude
         else:
             target_lon = self.longitude
             target_lat = self.latitude
@@ -1778,7 +1936,7 @@ class Environment:
         _, lat_index = find_latitude_index(target_lat, lat_array)
 
         # Get pressure level data from file
-        levels = get_pressure_levels_from_file(data, dictionary)
+        levels = get_pressure_levels_from_file(data, dictionary, conversion_factor)
 
         # Get geopotential data from file
         try:
@@ -1979,7 +2137,7 @@ class Environment:
         # Close weather data
         data.close()
 
-    def process_ensemble(self, file, dictionary):  # pylint: disable=too-many-locals,too-many-statements
+    def process_ensemble(self, file, dictionary, conversion_factor):  # pylint: disable=too-many-locals,too-many-statements
         """Import and process atmospheric data from weather ensembles
         given as ``netCDF`` or ``OPeNDAP`` files. Sets pressure, temperature,
         wind-u and wind-v profiles and surface elevation obtained from a weather
@@ -2030,6 +2188,9 @@ class Environment:
                     "u_wind": "ugrdprs",
                     "v_wind": "vgrdprs",
                 }
+        conversion_factor : float, int
+            Specifies the factor by which the pressure will be multiplied
+            in order to transform it to Pascal.
 
         See also
         --------
@@ -2065,13 +2226,17 @@ class Environment:
         # coordinate system before locating the nearest grid cell.
         if dictionary.get("projection") is not None:
             projection_variable = data.variables[dictionary["projection"]]
-            x_units = getattr(lon_array, "units", "m")
-            target_lon, target_lat = geodesic_to_lambert_conformal(
-                self.latitude,
-                self.longitude,
-                projection_variable,
-                x_units=x_units,
-            )
+            if dictionary.get("projection") == "LambertConformal_Projection":
+                x_units = getattr(lon_array, "units", "m")
+                target_lon, target_lat = geodesic_to_lambert_conformal(
+                    self.latitude,
+                    self.longitude,
+                    projection_variable,
+                    x_units=x_units,
+                )
+            else:
+                target_lon = self.longitude
+                target_lat = self.latitude
         else:
             target_lon = self.longitude
             target_lat = self.latitude
@@ -2090,7 +2255,7 @@ class Environment:
             num_members = 1
 
         # Get pressure level data from file
-        levels = get_pressure_levels_from_file(data, dictionary)
+        levels = get_pressure_levels_from_file(data, dictionary, conversion_factor)
 
         inverse_dictionary = {v: k for k, v in dictionary.items()}
         param_dictionary = {
@@ -2609,9 +2774,10 @@ class Environment:
 
         with open(filename + ".json", "w") as f:
             json.dump(export_env_dictionary, f, sort_keys=False, indent=4, default=str)
-        print(
-            f"Your Environment file was saved at '{filename}.json'. You can use "
-            "it in the future by using the custom_atmosphere atmospheric model."
+        logger.info(
+            "Your Environment file was saved at '%s.json'. "
+            "You can use it in the future by using the custom_atmosphere atmospheric model.",
+            filename,
         )
 
     def set_earth_geometry(self, datum):
@@ -2844,6 +3010,6 @@ if __name__ == "__main__":  # pragma: no cover
 
     results = doctest.testmod()
     if results.failed < 1:
-        print(f"All the {results.attempted} tests passed!")
+        logger.debug("All the %d tests passed!", results.attempted)
     else:
-        print(f"{results.failed} out of {results.attempted} tests failed.")
+        logger.error("%d out of %d tests failed.", results.failed, results.attempted)

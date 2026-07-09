@@ -4,7 +4,7 @@ import matplotlib as plt
 import numpy as np
 import pytest
 
-from rocketpy import Flight
+from rocketpy import Flight, HemisphericalParachute
 
 plt.rcParams.update({"figure.max_open_warning": 0})
 
@@ -149,7 +149,7 @@ def test_simpler_parachute_triggers(mock_show, example_plain_env, calisto_robust
     """
     calisto_robust.parachutes = []
 
-    _ = calisto_robust.add_parachute(
+    main = HemisphericalParachute(
         "Main",
         cd_s=10.0,
         trigger=400,
@@ -157,7 +157,7 @@ def test_simpler_parachute_triggers(mock_show, example_plain_env, calisto_robust
         lag=0,
     )
 
-    _ = calisto_robust.add_parachute(
+    drogue2 = HemisphericalParachute(
         "Drogue2",
         cd_s=5.5,
         trigger=lambda pressure, height, state: height < 800 and state[5] < 0,
@@ -165,7 +165,69 @@ def test_simpler_parachute_triggers(mock_show, example_plain_env, calisto_robust
         lag=0,
     )
 
-    _ = calisto_robust.add_parachute(
+    drogue1 = HemisphericalParachute(
+        "Drogue",
+        cd_s=1.0,
+        trigger="apogee",
+        sampling_rate=105,
+        lag=0,
+    )
+    calisto_robust.add_parachute(parachute=main)
+    calisto_robust.add_parachute(parachute=drogue1)
+    calisto_robust.add_parachute(parachute=drogue2)
+
+    test_flight = Flight(
+        rocket=calisto_robust,
+        environment=example_plain_env,
+        rail_length=5,
+        inclination=85,
+        heading=0,
+    )
+
+    assert (
+        abs(test_flight.z(test_flight.parachute_events[0][0]) - test_flight.apogee) <= 1
+    )
+    assert (
+        abs(
+            test_flight.z(test_flight.parachute_events[1][0])
+            - (800 + example_plain_env.elevation)
+        )
+        <= 1
+    )
+    assert (
+        abs(
+            test_flight.z(test_flight.parachute_events[2][0])
+            - (400 + example_plain_env.elevation)
+        )
+        <= 1
+    )
+    assert calisto_robust.all_info() is None
+    assert test_flight.all_info() is None
+
+
+# TODO: When the legacy behavior is removed, remove this test
+@patch("matplotlib.pyplot.show")
+def test_legacy_add_parachute(mock_show, example_plain_env, calisto_robust):  # pylint: disable=unused-argument
+    """This is a legacy test that repeats the tests in 'test_simpler_parachute_triggers'
+    but using the 'add_parachute' method with legacy inputs. The results should be the same.
+    """
+    calisto_robust.parachutes = []
+
+    calisto_robust.add_parachute(
+        "Main",
+        cd_s=10.0,
+        trigger=400,
+        sampling_rate=105,
+        lag=0,
+    )
+    calisto_robust.add_parachute(
+        "Drogue2",
+        cd_s=5.5,
+        trigger=lambda pressure, height, state: height < 800 and state[5] < 0,
+        sampling_rate=105,
+        lag=0,
+    )
+    calisto_robust.add_parachute(
         "Drogue",
         cd_s=1.0,
         trigger="apogee",
@@ -811,3 +873,149 @@ def test_environment_methods_accessible_in_controller(
 
     # Verify all environment methods were successfully called
     assert all(methods_called.values()), f"Not all methods called: {methods_called}"
+
+
+def test_continuous_controller_invoked_every_step(calisto_robust, example_plain_env):
+    """A continuous controller (sampling_rate=None) must be called on every
+    solver step and receive the same state_history layout as a discrete one:
+    time-prefixed rows (`[t, *state]`), one element longer than ``state``.
+    This locks in the discrete/continuous parity contract."""
+    calls = {"count": 0, "sampling_rates": set(), "row_len_matches": True}
+
+    def recording_controller(  # pylint: disable=unused-argument
+        time, sampling_rate, state, state_history, observed_variables, air_brakes
+    ):
+        calls["count"] += 1
+        calls["sampling_rates"].add(sampling_rate)
+        # state_history rows are time-prefixed: exactly one longer than state
+        if len(state_history[-1]) != len(state) + 1:
+            calls["row_len_matches"] = False
+
+    calisto_robust.parachutes = []
+    calisto_robust.add_air_brakes(
+        drag_coefficient_curve="data/rockets/calisto/air_brakes_cd.csv",
+        controller_function=recording_controller,
+        sampling_rate=None,  # continuous
+        clamp=True,
+    )
+
+    flight = Flight(
+        rocket=calisto_robust,
+        environment=example_plain_env,
+        rail_length=5.2,
+        inclination=85,
+        heading=0,
+        time_overshoot=False,
+        terminate_on_apogee=True,
+    )
+
+    assert flight.t_final > 0
+    # Called many times (once per solver step), far more than any fixed rate
+    assert calls["count"] > 50
+    # The controller always saw sampling_rate=None (continuous)
+    assert calls["sampling_rates"] == {None}
+    # And time-prefixed rows, consistent with the discrete controller path
+    assert calls["row_len_matches"]
+
+
+def test_discrete_controller_invoked_once_per_node(calisto_robust, example_plain_env):
+    """Regression for PR #949 (remove duplicate controller process).
+
+    A discrete controller must be invoked exactly once per time node. The
+    removed duplicate loop invoked it a second time back-to-back with the
+    identical simulation time, so no consecutive controller call may share the
+    same time value.
+    """
+    times = []
+
+    def recording_controller(  # pylint: disable=unused-argument
+        time, sampling_rate, state, state_history, observed_variables, air_brakes
+    ):
+        times.append(time)
+
+    calisto_robust.parachutes = []
+    calisto_robust.add_air_brakes(
+        drag_coefficient_curve="data/rockets/calisto/air_brakes_cd.csv",
+        controller_function=recording_controller,
+        sampling_rate=10,  # discrete controller
+        clamp=True,
+    )
+
+    flight = Flight(
+        rocket=calisto_robust,
+        environment=example_plain_env,
+        rail_length=5.2,
+        inclination=85,
+        heading=0,
+        time_overshoot=False,
+        terminate_on_apogee=True,
+    )
+
+    assert flight.t_final > 0
+    assert len(times) > 10
+    # The duplicate-process bug produced two consecutive calls at the same time.
+    assert all(times[i] != times[i + 1] for i in range(len(times) - 1))
+    # No node time is processed more than once over the whole flight.
+    assert len(times) == len(set(times))
+
+
+def test_acceleration_based_parachute_trigger_deploys(
+    calisto_robust, example_plain_env
+):
+    """Integration test for PR #911: a parachute whose trigger consumes the
+    acceleration vector (a 4-argument trigger with a ``u_dot`` parameter) must
+    deploy during a full flight, exercising the u_dot code path end-to-end."""
+
+    def acc_trigger(p, h, y, u_dot):  # pylint: disable=unused-argument
+        # y[5] = vertical velocity; u_dot[5] = vertical acceleration.
+        # Deploy once descending with a downward acceleration (just past apogee).
+        return y[5] < 0 and u_dot[5] < 0
+
+    calisto_robust.parachutes = []
+    chute = HemisphericalParachute(
+        name="acc_chute",
+        cd_s=10.0,
+        trigger=acc_trigger,
+        sampling_rate=100,
+        lag=0,
+    )
+    calisto_robust.add_parachute(parachute=chute)
+
+    # Do NOT terminate at apogee: the flight must descend for the trigger to fire.
+    flight = Flight(
+        rocket=calisto_robust,
+        environment=example_plain_env,
+        rail_length=5.2,
+        inclination=85,
+        heading=0,
+    )
+
+    # The acceleration (u_dot) trigger path was selected for this trigger.
+    assert getattr(chute.triggerfunc, "_expects_udot", False)
+
+    # The chute deployed, and did so essentially at apogee (first downward accel).
+    assert len(flight.parachute_events) >= 1
+    deploy_time, deployed = flight.parachute_events[0]
+    assert deployed.name == "acc_chute"
+    assert abs(flight.z(deploy_time) - flight.apogee) <= 5
+
+
+def test_to_dict_populates_parachutes_info_lazily(flight_calisto_robust):
+    """Regression: parachutes_info is filled only as a side effect of the lazy
+    post-processing pass. to_dict() must trigger that pass so the per-parachute
+    drag time series is serialized even when no post-processed property was
+    accessed first (e.g. a flight without controllers saved right after running).
+    """
+    flight = flight_calisto_robust
+
+    # Not populated yet: no post-processed property has been accessed.
+    assert flight.parachutes_info == {}
+
+    data = flight.to_dict()
+
+    # to_dict must have triggered post-processing, populating the drag series.
+    assert data["parachutes_info"]
+    assert data["parachutes_info"] is flight.parachutes_info
+    for info in data["parachutes_info"].values():
+        assert info["drag"]
+        assert info["t"]

@@ -143,7 +143,7 @@ The following image shows how the four main classes interact with each other:
 A typical workflow starts with importing these classes from RocketPy:
 
 ```python
-from rocketpy import Environment, Rocket, SolidMotor, Flight
+from rocketpy import Environment, Rocket, SolidMotor, Flight, HemisphericalParachute
 ```
 
 An optional step is to import datetime, which is used to define the date of the simulation:
@@ -255,7 +255,7 @@ tail = calisto.add_tail(
 You may want to add parachutes to your rocket as well:
 
 ```python
-main = calisto.add_parachute(
+main = HemisphericalParachute(
     name="main",
     cd_s=10.0,
     trigger=800,  # ejection altitude in meters
@@ -267,7 +267,7 @@ main = calisto.add_parachute(
     porosity=0.0432,
 )
 
-drogue = calisto.add_parachute(
+drogue = HemisphericalParachute(
     name="drogue",
     cd_s=1.0,
     trigger="apogee",  # ejection at apogee
@@ -278,6 +278,9 @@ drogue = calisto.add_parachute(
     height=1.5,
     porosity=0.0432,
 )
+
+calisto.add_parachute(parachute = main)
+calisto.add_parachute(parachute = drogue)
 ```
 
 Finally, you can create a Flight object to simulate your trajectory. To get help on the Flight class, use:
@@ -310,10 +313,12 @@ Here is just a quick taste of what RocketPy is able to calculate. There are hund
 
 ![6-DOF Trajectory Plot](https://raw.githubusercontent.com/RocketPy-Team/RocketPy/master/docs/static/rocketpy_example_trajectory.svg)
 
-If you want to see the trajectory on Google Earth, RocketPy acn easily export a KML file for you:
+If you want to see the trajectory on Google Earth, RocketPy can easily export a KML file for you:
 
 ```python
-test_flight.export_kml(file_name="test_flight.kml")
+from rocketpy.simulation import FlightDataExporter
+
+FlightDataExporter(test_flight).export_kml(file_name="test_flight.kml")
 ```
 
 <img alt="6-DOF Trajectory Plot" src="https://raw.githubusercontent.com/RocketPy-Team/RocketPy/master/docs/static/trajectory-earth.png" width="501">

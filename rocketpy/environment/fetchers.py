@@ -3,6 +3,7 @@ third-party APIs. As this is a recent module (introduced in v1.2.0), some
 functions may be changed without notice in future feature releases.
 """
 
+import logging
 import re
 import time
 from datetime import datetime, timedelta, timezone
@@ -11,6 +12,8 @@ import netCDF4
 import requests
 
 from rocketpy.tools import exponential_backoff
+
+logger = logging.getLogger(__name__)
 
 MAX_RETRY_DELAY_SECONDS = 600
 
@@ -37,7 +40,9 @@ def fetch_open_elevation(lat, lon):
     RuntimeError
         If there is a problem reaching the Open-Elevation API servers.
     """
-    print(f"Fetching elevation from open-elevation.com for lat={lat}, lon={lon}...")
+    logger.debug(
+        "Fetching elevation from open-elevation.com for lat=%s, lon=%s", lat, lon
+    )
     request_url = f"https://api.open-elevation.com/api/v1/lookup?locations={lat},{lon}"
     try:
         response = requests.get(request_url)
@@ -193,6 +198,78 @@ def fetch_rap_file_return_dataset(max_attempts=10, base_delay=2):
             time.sleep(min(base_delay**attempt_count, MAX_RETRY_DELAY_SECONDS))
 
     raise RuntimeError("Unable to load latest weather data for RAP through " + file_url)
+
+
+def fetch_hrrr_file_return_dataset(max_attempts=10, base_delay=2):
+    """Fetches the latest HRRR (High-Resolution Rapid Refresh) dataset from
+    the NOAA's GrADS data server using the OpenDAP protocol.
+
+    Parameters
+    ----------
+    max_attempts : int, optional
+        The maximum number of attempts to fetch the dataset. Default is 10.
+    base_delay : int, optional
+        The base delay in seconds between attempts. Default is 2.
+
+    Returns
+    -------
+    netCDF4.Dataset
+        The HRRR dataset.
+
+    Raises
+    ------
+    RuntimeError
+        If unable to load the latest weather data for HRRR.
+    """
+    file_url = "https://thredds.ucar.edu/thredds/dodsC/grib/NCEP/HRRR/CONUS_2p5km/Best"
+    attempt_count = 0
+    while attempt_count < max_attempts:
+        try:
+            return netCDF4.Dataset(file_url)
+        except OSError:
+            attempt_count += 1
+            time.sleep(min(base_delay**attempt_count, MAX_RETRY_DELAY_SECONDS))
+
+    raise RuntimeError(
+        "Unable to load latest weather data for HRRR through " + file_url
+    )
+
+
+def fetch_aigfs_file_return_dataset(max_attempts=10, base_delay=2):
+    """Fetches the latest AIGFS (Artificial Intelligence GFS) dataset from
+    the NOAA's GrADS data server using the OpenDAP protocol.
+
+    Parameters
+    ----------
+    max_attempts : int, optional
+        The maximum number of attempts to fetch the dataset. Default is 10.
+    base_delay : int, optional
+        The base delay in seconds between attempts. Default is 2.
+
+    Returns
+    -------
+    netCDF4.Dataset
+        The AIGFS dataset.
+
+    Raises
+    ------
+    RuntimeError
+        If unable to load the latest weather data for AIGFS.
+    """
+    file_url = (
+        "https://thredds.ucar.edu/thredds/dodsC/grib/NCEP/AIGFS/Global_0p25deg/Best"
+    )
+    attempt_count = 0
+    while attempt_count < max_attempts:
+        try:
+            return netCDF4.Dataset(file_url)
+        except OSError:
+            attempt_count += 1
+            time.sleep(min(base_delay**attempt_count, MAX_RETRY_DELAY_SECONDS))
+
+    raise RuntimeError(
+        "Unable to load latest weather data for AIGFS through " + file_url
+    )
 
 
 def fetch_hiresw_file_return_dataset(max_attempts=10, base_delay=2):

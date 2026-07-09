@@ -1505,3 +1505,53 @@ def test_regular_grid_invalid_source_raises(bad_source, match):
             outputs=["z"],
             interpolation="regular_grid",
         )
+
+
+def test_2d_linear_interpolation_no_nan_outside_convex_hull():
+    """Test that querying a point inside the bounding box but outside the
+    convex hull does not silently return NaN.
+
+    Regression test for https://github.com/RocketPy-Team/RocketPy/issues/926.
+    The point (0.3, 0.3) lies within the axis-aligned bounding box of the
+    data but outside the convex hull, so LinearNDInterpolator would return
+    NaN without proper hull detection.
+    """
+    data = [
+        [0.0, 0.0, 0.000],
+        [0.0, 0.1, 0.100],
+        [0.0, 0.4, 0.400],
+        [0.3, 0.2, 0.150],
+    ]
+    func = Function(data, interpolation="linear")
+    result = func(0.3, 0.3)
+
+    assert not np.isnan(result), (
+        "f(0.3, 0.3) returned NaN. Point is outside the convex hull and "
+        "should be routed to extrapolation, not silently return NaN."
+    )
+
+
+def test_3d_linear_interpolation_no_nan_outside_convex_hull():
+    """Extend the convex-hull regression (issue #926) to three dimensions.
+
+    The fix in PR #969 targets N-dimensional linear interpolation, so a point
+    inside the axis-aligned bounding box but outside the convex hull must not
+    silently return NaN for 3D data either.
+    """
+    # Tetrahedron-like point cloud in the [0, 1]^3 bounding box.
+    data = [
+        [0.0, 0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0, 1.0],
+        [0.0, 1.0, 0.0, 1.0],
+        [0.0, 0.0, 1.0, 1.0],
+        [0.2, 0.2, 0.2, 0.6],
+    ]
+    func = Function(data, interpolation="linear")
+    # (0.9, 0.9, 0.9) is inside the bounding box but far outside the hull
+    # (its coordinates sum to 2.7, well beyond the x + y + z <= 1 face).
+    result = func(0.9, 0.9, 0.9)
+
+    assert not np.isnan(result), (
+        "f(0.9, 0.9, 0.9) returned NaN. Point is outside the 3D convex hull "
+        "and should be routed to extrapolation, not silently return NaN."
+    )

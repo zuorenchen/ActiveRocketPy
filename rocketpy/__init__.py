@@ -1,5 +1,10 @@
 from .control import _Controller
 from .environment import Environment, EnvironmentAnalysis
+from .exceptions import (
+    InvalidInertiaError,
+    InvalidParameterError,
+    UnstableRocketWarning,
+)
 from .mathutils import (
     Function,
     PiecewiseFunction,
@@ -18,6 +23,7 @@ from .motors import (
     MassFlowRateBasedTank,
     Motor,
     PointMassMotor,
+    RingClusterMotor,
     SolidMotor,
     SphericalTank,
     Tank,
@@ -29,10 +35,14 @@ from .rocket import (
     AeroSurface,
     AirBrakes,
     Components,
+    EllipticalFin,
     EllipticalFins,
+    Fin,
     Fins,
+    FreeFormFin,
     FreeFormFins,
     GenericSurface,
+    HemisphericalParachute,
     LinearGenericSurface,
     NoseCone,
     Parachute,
@@ -40,6 +50,7 @@ from .rocket import (
     RailButtons,
     Rocket,
     Tail,
+    TrapezoidalFin,
     TrapezoidalFins,
 )
 from .sensitivity import SensitivityModel
@@ -58,3 +69,8 @@ from .stochastic import (
     StochasticTail,
     StochasticTrapezoidalFins,
 )
+
+# Imported last: utilities pulls in Environment/Rocket/encoders, which are only
+# fully available once the imports above have run. Exposes
+# ``rocketpy.utilities`` (including ``enable_logging``) on ``import rocketpy``.
+from . import utilities

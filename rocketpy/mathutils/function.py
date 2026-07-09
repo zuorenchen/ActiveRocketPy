@@ -5,6 +5,7 @@ and more. This is a core class of our package, and should be maintained
 carefully as it may impact all the rest of the project.
 """
 
+import logging
 import operator
 import warnings
 from bisect import bisect_left
@@ -25,9 +26,12 @@ from scipy.interpolate import (
     RBFInterpolator,
     RegularGridInterpolator,
 )
+from scipy.spatial import Delaunay  # pylint: disable=no-name-in-module
 
 from rocketpy.plots.plot_helpers import show_or_save_plot
 from rocketpy.tools import deprecated, from_hex_decode, to_hex_encode
+
+logger = logging.getLogger(__name__)
 
 NUMERICAL_TYPES = (float, int, complex, np.integer, np.floating)
 INTERPOLATION_TYPES = {
@@ -519,7 +523,9 @@ class Function:  # pylint: disable=too-many-public-methods
                         return (x - x_left) * (dy / dx) + y_left
 
                 else:
-                    interpolator = LinearNDInterpolator(self._domain, self._image)
+                    tri = Delaunay(self._domain)
+                    interpolator = LinearNDInterpolator(tri, self._image)
+                    self._nd_triangulation = tri
 
                     def linear_interpolation(x, x_min, x_max, x_data, y_data, coeffs):  # pylint: disable=unused-argument
                         return interpolator(x)
@@ -827,8 +833,11 @@ class Function:  # pylint: disable=too-many-public-methods
         min_domain = self._domain.T.min(axis=1)
         max_domain = self._domain.T.max(axis=1)
 
-        lower, upper = args < min_domain, args > max_domain
-        extrap = np.logical_or(lower.any(axis=1), upper.any(axis=1))
+        if self.__interpolation__ == "linear" and hasattr(self, "_nd_triangulation"):
+            extrap = self._nd_triangulation.find_simplex(args) < 0
+        else:
+            lower, upper = args < min_domain, args > max_domain
+            extrap = np.logical_or(lower.any(axis=1), upper.any(axis=1))
 
         if extrap.any():
             result[extrap] = self._extrapolation_func(
@@ -2012,7 +2021,7 @@ class Function:  # pylint: disable=too-many-public-methods
             elif self.__dom_dim__ == 2:
                 self.plot_2d(*args, **kwargs)
             else:
-                print("Error: Only functions with 1D or 2D domains can be plotted.")
+                logger.error("Only functions with 1D or 2D domains can be plotted.")
 
     @deprecated(
         reason="The `Function.plot1D` method is set to be deprecated and fully "
@@ -4399,6 +4408,6 @@ if __name__ == "__main__":  # pragma: no cover
 
     results = doctest.testmod()
     if results.failed < 1:
-        print(f"All the {results.attempted} tests passed!")
+        logger.info("All the %d tests passed!", results.attempted)
     else:
-        print(f"{results.failed} out of {results.attempted} tests failed.")
+        logger.error("%d out of %d tests failed.", results.failed, results.attempted)
