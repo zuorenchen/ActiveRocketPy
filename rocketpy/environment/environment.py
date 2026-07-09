@@ -1754,11 +1754,11 @@ class Environment:
 
             Example:
 
-            http://weather.uwyo.edu/cgi-bin/sounding?region=samer&TYPE=TEXT%3ALIST&YEAR=2019&MONTH=02&FROM=0200&TO=0200&STNM=82599
+            https://weather.uwyo.edu/wsgi/sounding?datetime=2019-02-05%2012:00:00&id=83779&type=TEXT:LIST
 
         Notes
         -----
-        More can be found at: http://weather.uwyo.edu/upperair/sounding.html.
+        More can be found at: https://weather.uwyo.edu/upperair/sounding.shtml.
 
         Returns
         -------
@@ -1770,7 +1770,9 @@ class Environment:
         # Process Wyoming Sounding by finding data table and station info
         response_split_text = re.split("(<.{0,1}PRE>)", response.text)
         data_table = response_split_text[2]
-        station_info = response_split_text[6]
+        # Legacy CGI pages had extra <PRE> blocks with station information;
+        # current WSGI pages have a single block with the data table only.
+        station_info = response_split_text[6] if len(response_split_text) > 6 else None
 
         # Transform data table into np array
         data_array = []
@@ -1792,8 +1794,10 @@ class Environment:
         self.__set_temperature_function(data_array[:, (1, 2)])
 
         # Retrieve wind-u and wind-v from data array
-        ## Converts Knots to m/s
-        data_array[:, 7] = data_array[:, 7] * 1.852 / 3.6
+        ## Legacy pages report wind speed as SKNT (knots); current WSGI pages
+        ## report it as SPED (m/s) and need no conversion.
+        if "SKNT" in data_table.split("\n")[2]:
+            data_array[:, 7] = data_array[:, 7] * 1.852 / 3.6  # Knots to m/s
         ## Convert wind direction to wind heading
         data_array[:, 5] = (data_array[:, 6] + 180) % 360
         data_array[:, 3] = data_array[:, 7] * np.sin(data_array[:, 5] * np.pi / 180)
@@ -1811,13 +1815,16 @@ class Environment:
         self.__set_wind_direction_function(data_array[:, (1, 6)])
         self.__set_wind_speed_function(data_array[:, (1, 7)])
 
-        # Retrieve station elevation from station info
-        station_elevation_text = station_info.split("\n")[6]
-
-        # Convert station elevation text into float value
-        self.elevation = float(
-            re.findall(r"[0-9]+\.[0-9]+|[0-9]+", station_elevation_text)[0]
-        )
+        # Retrieve station elevation
+        if station_info is not None:
+            # Legacy pages: read it from the station information block
+            station_elevation_text = station_info.split("\n")[6]
+            self.elevation = float(
+                re.findall(r"[0-9]+\.[0-9]+|[0-9]+", station_elevation_text)[0]
+            )
+        else:
+            # Current WSGI pages: use the surface (first) level height
+            self.elevation = float(data_array[0, 1])
 
         # Save maximum expected height
         self._max_expected_height = data_array[-1, 1]
