@@ -32,6 +32,7 @@ Attention: The newest changes should be on top -->
 
 ### Added
 
+- ENH: MNT: remove duplicate and merge-sync entries from Unreleased changelog [#1062](https://github.com/RocketPy-Team/RocketPy/pull/1062)
 ### Changed
 
 ### Fixed
