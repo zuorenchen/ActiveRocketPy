@@ -32,10 +32,11 @@ Attention: The newest changes should be on top -->
 
 ### Added
 
+- ENH: REV: Revert PR #958 [#1063](https://github.com/RocketPy-Team/RocketPy/pull/1063)
+- ENH: MNT: remove duplicate and merge-sync entries from Unreleased changelog [#1062](https://github.com/RocketPy-Team/RocketPy/pull/1062)
 ### Changed
 
 ### Fixed
-
 
 ## [v1.13.0] - 2026-07-04
 
@@ -43,6 +44,7 @@ Attention: The newest changes should be on top -->
 
 - ENH: ENH: Refactor flight.py latitude/longitude to use inverted_haversine [#1055](https://github.com/RocketPy-Team/RocketPy/pull/1055)
 - ENH: TST: Add unit tests for evaluate_reduced_mass and remove TODO [#1051](https://github.com/RocketPy-Team/RocketPy/pull/1051)
+- ENH: seed sensor measurement noise per instance [#1052](https://github.com/RocketPy-Team/RocketPy/pull/1052)
 - ENH: FIX: pre release hardening [#1047](https://github.com/RocketPy-Team/RocketPy/pull/1047)
 - ENH: DEV: Claude Code ruff hooks (auto-format on edit + pre-push lint guard) [#1046](https://github.com/RocketPy-Team/RocketPy/pull/1046)
 - ENH: CI: create a CI for testing docs updates + solve different docs issues [#1045](https://github.com/RocketPy-Team/RocketPy/pull/1045)
@@ -86,6 +88,7 @@ Attention: The newest changes should be on top -->
 
 ### Fixed
 
+- BUG: Environment not Encoding Necessary Parameters for Decode [#1059](https://github.com/RocketPy-Team/RocketPy/pull/1059)
 - BUG: fix individual fin (`TrapezoidalFin`, `EllipticalFin`, `FreeFormFin`) serialization crash when saving rockets/flights [#1048](https://github.com/RocketPy-Team/RocketPy/pull/1048)
 - BUG: support the new Wyoming sounding WSGI page format (legacy cgi-bin endpoint was discontinued by UWyo) [#1048](https://github.com/RocketPy-Team/RocketPy/pull/1048)
 - FIX: pre-release hardening — bug fixes across the unreleased features [#1047](https://github.com/RocketPy-Team/RocketPy/pull/1047)
