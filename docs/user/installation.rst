@@ -153,8 +153,7 @@ RocketPy has several optional feature sets that can be installed individually.
     pip install rocketpy[env_analysis]
 
 **3D Flight Animation** — interactive 3D animations of rocket trajectory and
-attitude using `PyVista <https://pyvista.org/>`_ (a desktop environment is
-recommended):
+attitude using `vedo <https://vedo.embl.es/>`_ (requires a desktop environment):
 
 .. code-block:: shell
 
