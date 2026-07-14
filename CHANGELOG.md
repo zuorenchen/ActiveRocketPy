@@ -40,6 +40,7 @@ Attention: The newest changes should be on top -->
 ### Changed
 
 - MNT: MNT: Remove Unused pylint Disable Statements. [#1067](https://github.com/RocketPy-Team/RocketPy/pull/1067)
+- MNT: MNT: Remove Unused pylint Disable Statements. [#1067](https://github.com/RocketPy-Team/RocketPy/pull/1067)
 
 ### Fixed
 
