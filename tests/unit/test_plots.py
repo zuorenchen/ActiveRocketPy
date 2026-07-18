@@ -143,8 +143,17 @@ def test_show_or_save_animation_unsupported_format():
         show_or_save_animation(animation, "test.mp4")
 
 
-def test_animate_propellant_mass(cesaroni_m1670):
+def test_animate_propellant_mass(cesaroni_m1670, monkeypatch):
     """Test that animate_propellant_mass saves a .gif file correctly."""
+
+    def mock_show_or_save(animation, filename=None, fps=30):  # pylint: disable=unused-argument
+        if filename:
+            with open(filename, "a"):
+                pass
+
+    monkeypatch.setattr(
+        "rocketpy.plots.motor_plots.show_or_save_animation", mock_show_or_save
+    )
 
     motor = cesaroni_m1670
     animation = motor.plots.animate_propellant_mass(filename="cesaroni_m1670.gif")
@@ -158,8 +167,17 @@ def test_animate_propellant_mass(cesaroni_m1670):
     os.remove("cesaroni_m1670.gif")
 
 
-def test_animate_fluid_volume(example_mass_flow_rate_based_tank_seblm):
+def test_animate_fluid_volume(example_mass_flow_rate_based_tank_seblm, monkeypatch):
     """Test that animate_fluid_volume saves a .gif file correctly."""
+
+    def mock_show_or_save(animation, filename=None, fps=30):  # pylint: disable=unused-argument
+        if filename:
+            with open(filename, "a"):
+                pass
+
+    monkeypatch.setattr(
+        "rocketpy.plots.tank_plots.show_or_save_animation", mock_show_or_save
+    )
 
     tank = example_mass_flow_rate_based_tank_seblm
     animation = tank.plots.animate_fluid_volume(filename="test_fluid_volume.gif")

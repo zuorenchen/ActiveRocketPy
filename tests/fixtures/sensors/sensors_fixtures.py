@@ -74,6 +74,7 @@ def noisy_gnss():
         sampling_rate=1,
         position_accuracy=1,
         altitude_accuracy=1,
+        seed=42,
     )
 
 
