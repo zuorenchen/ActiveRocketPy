@@ -2060,7 +2060,6 @@ class Rocket:
             Controller object created (only if return_controller is True).
         """
         if hasattr(self, "thrust_vector_control"):
-            # pylint: disable=access-member-before-definition
             warnings.warn(
                 "Only one thrust_vector_control per rocket is currently supported. "
                 + "Overwriting previous thrust_vector_control and controllers."
@@ -2192,7 +2191,6 @@ class Rocket:
             Controller object created (only if return_controller is True).
         """
         if hasattr(self, "roll_control"):
-            # pylint: disable=access-member-before-definition
             warnings.warn(
                 "Only one roll control per rocket is currently supported. "
                 + "Overwriting previous roll control and controllers."
