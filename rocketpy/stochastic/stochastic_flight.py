@@ -35,6 +35,22 @@ class StochasticFlight(StochasticModel):
     max_time : int, float
         The maximum time of the flight simulation. If the flight simulation
         reaches this time, it will terminate. This attribute can not be randomized.
+    max_time_step :
+        This attribute can not be randomized and is inherited from the base Flight object.
+    min_time_step :
+        This attribute can not be randomized and is inherited from the base Flight object.
+    rtol :
+        This attribute can not be randomized and is inherited from the base Flight object.
+    atol :
+        This attribute can not be randomized and is inherited from the base Flight object.
+    name :
+        This attribute can not be randomized and is inherited from the base Flight object.
+    equations_of_motion:
+        This attribute can not be randomized and is inherited from the base Flight object.
+    ode_solver:
+        This attribute can not be randomized and is inherited from the base Flight object.
+    simulation_mode:
+        This attribute can not be randomized and is inherited from the base Flight object.
     """
 
     def __init__(
@@ -106,6 +122,21 @@ class StochasticFlight(StochasticModel):
         else:
             self.time_overshoot = time_overshoot
 
+        # The following attributes are not randomized and are set to the values
+        # of the flight object. Move to helper to reduce statements in __init__.
+        self._copy_nonrandom_attrs(flight)
+
+    def _copy_nonrandom_attrs(self, flight):
+        """Copy non-randomized attributes from the base Flight object."""
+        self.max_time_step = flight.max_time_step
+        self.min_time_step = flight.min_time_step
+        self.rtol = flight.rtol
+        self.atol = flight.atol
+        self.name = flight.name
+        self.equations_of_motion = flight.equations_of_motion
+        self.ode_solver = flight.ode_solver
+        self.simulation_mode = flight.simulation_mode
+
     def _validate_initial_solution(self, initial_solution):
         if initial_solution is not None:
             if isinstance(initial_solution, (tuple, list)):
@@ -149,13 +180,21 @@ class StochasticFlight(StochasticModel):
         generated_dict = next(self.dict_generator())
         # TODO: maybe we should use generated_dict["rail_length"] instead
         return Flight(
+            rocket=self.obj.rocket,
             environment=self.obj.env,
             rail_length=self._randomize_rail_length(),
-            rocket=self.obj.rocket,
             inclination=generated_dict["inclination"],
             heading=generated_dict["heading"],
             initial_solution=self.initial_solution,
             terminate_on_apogee=self.terminate_on_apogee,
-            time_overshoot=self.time_overshoot,
             max_time=self.max_time,
+            max_time_step=self.max_time_step,
+            min_time_step=self.min_time_step,
+            rtol=self.rtol,
+            atol=self.atol,
+            time_overshoot=self.time_overshoot,
+            name=self.name,
+            equations_of_motion=self.equations_of_motion,
+            ode_solver=self.ode_solver,
+            simulation_mode=self.simulation_mode,
         )
