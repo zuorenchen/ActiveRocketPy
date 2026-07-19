@@ -1265,9 +1265,10 @@ class _FlightPlots:
             Ground texture. A mapping may define ``image``, ``bounds``,
             ``coordinates`` (``"enu"`` or ``"latlon"``), and ``flip_y`` for
             geographic placement. Default is None.
-        color_by : {"speed", "mach", "dynamic_pressure", "acceleration",
-            "altitude", False, None}, optional
-            Trajectory point scalar. Default is "speed".
+        color_by : str | bool | None, optional
+            Trajectory point scalar, one of ``"speed"``, ``"mach"``,
+            ``"dynamic_pressure"``, ``"acceleration"``, ``"altitude"``,
+            ``False`` or ``None``. Default is "speed".
         show_kinematic_plots : bool, optional
             Show altitude, speed and acceleration histories. Default is False.
         camera_mode : {"static", "follow", "ground", "body"}, optional
