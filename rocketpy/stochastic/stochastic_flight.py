@@ -32,6 +32,9 @@ class StochasticFlight(StochasticModel):
     time_overshoot : bool
         If False, the simulation will run at the time step defined by the controller
         sampling rate. Be aware that this will make the simulation run much slower.
+    max_time : int, float
+        The maximum time of the flight simulation. If the flight simulation
+        reaches this time, it will terminate. This attribute can not be randomized.
     """
 
     def __init__(
@@ -43,6 +46,7 @@ class StochasticFlight(StochasticModel):
         initial_solution=None,
         terminate_on_apogee=None,
         time_overshoot=None,
+        max_time=None,
     ):
         """Initializes the Stochastic Flight class.
 
@@ -70,6 +74,9 @@ class StochasticFlight(StochasticModel):
         time_overshoot : bool
             If False, the simulation will run at the time step defined by the controller
             sampling rate. Be aware that this will make the simulation run much slower.
+        max_time : int, float
+            The maximum time of the flight simulation. If the flight simulation
+            reaches this time, it will terminate. This attribute can not be randomized.
         """
         if terminate_on_apogee is not None:
             assert isinstance(terminate_on_apogee, bool), (
@@ -78,6 +85,9 @@ class StochasticFlight(StochasticModel):
         if time_overshoot is not None:
             if not isinstance(time_overshoot, bool):
                 raise TypeError("`time_overshoot` must be a boolean")
+        if max_time is not None:
+            if not isinstance(max_time, (int, float)):
+                raise TypeError("`max_time` must be a number")
         super().__init__(
             flight,
             rail_length=rail_length,
@@ -87,6 +97,10 @@ class StochasticFlight(StochasticModel):
 
         self.initial_solution = initial_solution
         self.terminate_on_apogee = terminate_on_apogee
+        if max_time is None:
+            self.max_time = flight.max_time
+        else:
+            self.max_time = max_time
         if time_overshoot is None:
             self.time_overshoot = flight.time_overshoot
         else:
@@ -143,4 +157,5 @@ class StochasticFlight(StochasticModel):
             initial_solution=self.initial_solution,
             terminate_on_apogee=self.terminate_on_apogee,
             time_overshoot=self.time_overshoot,
+            max_time=self.max_time,
         )
