@@ -57,6 +57,11 @@ class GnssReceiver(ScalarSensor):
             velocity in meters per second. Default is 0.
         name : str
             The name of the sensor. Default is "GnssReceiver".
+        seed : int, optional
+            Seed for the random number generator that draws the measurement
+            noise. If given, the noise becomes reproducible and independent of
+            the process-global NumPy RNG. Default is None, meaning the noise is
+            seeded from fresh entropy per instance.
         """
         super().__init__(sampling_rate=sampling_rate, name=name, seed=seed)
         self.position_accuracy = position_accuracy
@@ -133,6 +138,7 @@ class GnssReceiver(ScalarSensor):
             "altitude_accuracy": self.altitude_accuracy,
             "velocity_accuracy": self.velocity_accuracy,
             "name": self.name,
+            "seed": self._seed,
         }
 
     @classmethod
@@ -143,4 +149,5 @@ class GnssReceiver(ScalarSensor):
             altitude_accuracy=data["altitude_accuracy"],
             velocity_accuracy=data["velocity_accuracy"],
             name=data["name"],
+            seed=data.get("seed"),
         )
